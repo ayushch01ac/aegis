@@ -10,16 +10,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.aegis.support.AbstractPostgresIntegrationTest;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -34,9 +35,12 @@ class RouteApiIT extends AbstractPostgresIntegrationTest {
     @Autowired
     private RouteRepository routeRepository;
 
+    private String authorization;
+
     @BeforeEach
     void clearRoutes() {
         routeRepository.deleteAll();
+        authorization = "Bearer " + tokenForBootstrapAdministrator();
     }
 
     @Test
@@ -55,6 +59,7 @@ class RouteApiIT extends AbstractPostgresIntegrationTest {
     @Test
     void routeCrudLifecycle() throws Exception {
         MvcResult createdResult = mockMvc.perform(post("/api/v1/routes")
+                        .header(HttpHeaders.AUTHORIZATION, authorization)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(routeJson("orders-service", "http://orders:8080", 2000, "HIGH")))
                 .andExpect(status().isCreated())
@@ -65,24 +70,26 @@ class RouteApiIT extends AbstractPostgresIntegrationTest {
         JsonNode created = objectMapper.readTree(createdResult.getResponse().getContentAsString());
         String id = created.get("id").asText();
 
-        mockMvc.perform(get("/api/v1/routes/" + id))
+        mockMvc.perform(get("/api/v1/routes/" + id).header(HttpHeaders.AUTHORIZATION, authorization))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.timeoutMs").value(2000));
 
         mockMvc.perform(put("/api/v1/routes/" + id)
+                        .header(HttpHeaders.AUTHORIZATION, authorization)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(routeJson("orders-service", "http://orders:9090", 3000, "CRITICAL")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.baseUrl").value("http://orders:9090"))
                 .andExpect(jsonPath("$.priority").value("CRITICAL"));
 
-        mockMvc.perform(get("/api/v1/routes"))
+        mockMvc.perform(get("/api/v1/routes").header(HttpHeaders.AUTHORIZATION, authorization))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1));
 
-        mockMvc.perform(delete("/api/v1/routes/" + id)).andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/v1/routes/" + id).header(HttpHeaders.AUTHORIZATION, authorization))
+                .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/v1/routes/" + id))
+        mockMvc.perform(get("/api/v1/routes/" + id).header(HttpHeaders.AUTHORIZATION, authorization))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ROUTE_NOT_FOUND"))
                 .andExpect(jsonPath("$.requestId").isNotEmpty());
@@ -91,11 +98,13 @@ class RouteApiIT extends AbstractPostgresIntegrationTest {
     @Test
     void duplicateNameReturnsConflict() throws Exception {
         mockMvc.perform(post("/api/v1/routes")
+                        .header(HttpHeaders.AUTHORIZATION, authorization)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(routeJson("orders-service", "http://orders:8080", 2000, "HIGH")))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(post("/api/v1/routes")
+                        .header(HttpHeaders.AUTHORIZATION, authorization)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(routeJson("orders-service", "http://orders:8081", 2000, "HIGH")))
                 .andExpect(status().isConflict())
@@ -105,6 +114,7 @@ class RouteApiIT extends AbstractPostgresIntegrationTest {
     @Test
     void errorsIncludeRequestId() throws Exception {
         MvcResult result = mockMvc.perform(post("/api/v1/routes")
+                        .header(HttpHeaders.AUTHORIZATION, authorization)
                         .header("X-Request-Id", "req-test-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
@@ -127,5 +137,18 @@ class RouteApiIT extends AbstractPostgresIntegrationTest {
                 }
                 """
                 .formatted(name, baseUrl, timeoutMs, priority);
+    }
+
+    private String tokenForBootstrapAdministrator() {
+        try {
+            MvcResult result = mockMvc.perform(post("/api/v1/auth/token")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"username\":\"test-admin\",\"password\":\"test-password-not-for-production\"}"))
+                    .andExpect(status().isOk())
+                    .andReturn();
+            return objectMapper.readTree(result.getResponse().getContentAsString()).get("accessToken").asString();
+        } catch (Exception exception) {
+            throw new IllegalStateException("Could not obtain an integration-test access token", exception);
+        }
     }
 }

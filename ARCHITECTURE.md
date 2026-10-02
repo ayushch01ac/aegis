@@ -2,7 +2,7 @@
 
 ## Current implementation
 
-Aegis is a modular monolith: one Spring Boot deployment owns the HTTP API and route configuration. Phase 0 (foundation) and Phase 1 (route management) are complete.
+Aegis is a modular monolith: one Spring Boot deployment owns the HTTP API, authentication, and route configuration. Phase 0 (foundation), Phase 1 (route management), and Phase 2 (authentication and authorization) are complete.
 
 ```text
 Client
@@ -11,6 +11,7 @@ Client
 Aegis (Spring Boot)
   |-- Request ID filter
   |-- Status and actuator endpoints
+  |-- JWT authentication and role authorization
   |-- Route administration API
   |-- Validation and structured error handling
   |
@@ -39,7 +40,9 @@ The route administration API is currently the only request path. Saving a route 
 
 ### Current security posture
 
-Spring Security is present so its integration can evolve in place, but every request is intentionally permitted during Phase 1. CSRF, form login, and HTTP Basic are disabled; the application is stateless. This is not an authenticated or authorization-protected deployment yet.
+Spring Security validates HMAC-SHA256 Bearer JWTs. Signing material, token lifetime, and bootstrap administrator credentials are supplied through environment variables. A Flyway migration stores users with BCrypt password hashes and a single role. The bootstrap administrator is created only when its username does not already exist; credentials are never logged.
+
+Route reads require `ADMIN`, `OPERATOR`, or `VIEWER`; route mutations require `ADMIN`. CSRF, form login, and HTTP Basic are disabled because the API is stateless. Security failures use the standard structured-error shape and include the request ID.
 
 ## Target architecture
 
@@ -79,8 +82,8 @@ PostgreSQL will hold durable configuration and metadata. Redis will be introduce
 ## Phased evolution
 
 1. **Complete:** foundation and route management.
-2. **Next:** JWT authentication with `ADMIN`, `OPERATOR`, and `VIEWER` permissions for administration APIs.
-3. Add the simplest controlled proxy with explicit connection/response timeouts and safe downstream-error mapping.
+2. **Complete:** JWT authentication with `ADMIN`, `OPERATOR`, and `VIEWER` permissions for administration APIs.
+3. **Next:** add the simplest controlled proxy with explicit connection/response timeouts and safe downstream-error mapping.
 4. Add Redis infrastructure, then an atomic fixed-window limiter followed by token bucket.
 5. Add idempotency-aware retries and a testable `CLOSED` / `OPEN` / `HALF_OPEN` circuit breaker.
 6. Add bounded workers, bounded priority queues, and predictable overload rejection.
