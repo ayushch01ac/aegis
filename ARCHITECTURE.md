@@ -2,7 +2,9 @@
 
 ## Current implementation
 
-Aegis is a modular monolith: one Spring Boot deployment owns the HTTP API, authentication, route configuration, and controlled downstream proxying. Phase 0 (foundation), Phase 1 (route management), Phase 2 (authentication and authorization), and Phase 3 (controlled downstream proxy) are complete.
+## Current implementation
+
+Aegis is a modular monolith: one Spring Boot deployment owns the HTTP API, authentication, route configuration, controlled downstream proxying, and Redis infrastructure. Phase 0 (foundation), Phase 1 (route management), Phase 2 (authentication and authorization), Phase 3 (controlled downstream proxy), and Phase 4 (Redis connectivity and health checks) are complete.
 
 ```text
 Client
@@ -10,24 +12,25 @@ Client
   v
 Aegis (Spring Boot)
   |-- Request ID filter
-  |-- Status and actuator endpoints
+  |-- Status and actuator health endpoints (PostgreSQL + Redis)
   |-- JWT authentication and role authorization
   |-- Route administration API
   |-- Proxy: resolves route → builds URI → forwards with per-route timeout
   |-- Validation and structured error handling
   |
-  v
-PostgreSQL             Downstream services (via RestClient)
+  +---> PostgreSQL (Flyway migrations, DDL validate)
+  +---> Redis (Lettuce, StringRedisTemplate, Actuator RedisHealthIndicator)
+  +---> Downstream services (via RestClient)
 ```
 
-Docker Compose currently starts PostgreSQL only. Flyway owns the database schema, and Hibernate validates it at startup.
+Docker Compose starts PostgreSQL and Redis. Flyway owns the database schema, Hibernate validates it at startup, and Spring Data Redis (Lettuce) manages Redis connectivity with Actuator monitoring.
 
 ### Packages
 
 ```text
 com.aegis
   AegisApplication
-  common   configuration, request IDs, errors, pagination, status endpoint, OpenAPI
+  common   configuration (including Redis), request IDs, errors, pagination, status endpoint, OpenAPI
   route    downstream-service configuration CRUD
   proxy    controlled downstream HTTP forwarding
 ```
@@ -79,16 +82,17 @@ com.aegis
   common           shared HTTP and configuration concerns
 ```
 
-PostgreSQL will hold durable configuration and metadata. Redis will be introduced only for shared, low-latency, short-lived state such as rate-limit buckets and idempotency coordination. Kafka will be introduced after the synchronous request path is stable, so normal responses do not depend on consumers. Prometheus and Grafana are deferred until meaningful metrics exist.
+PostgreSQL holds durable configuration and metadata. Redis provides shared, low-latency, short-lived state such as rate-limit buckets and idempotency coordination. Kafka will be introduced after the synchronous request path is stable, so normal responses do not depend on consumers. Prometheus and Grafana are deferred until meaningful metrics exist.
 
 ## Phased evolution
 
 1. **Complete:** foundation and route management.
 2. **Complete:** JWT authentication with `ADMIN`, `OPERATOR`, and `VIEWER` permissions for administration APIs.
 3. **Complete:** controlled proxy at `/api/v1/proxy/{routeName}/**` with per-route explicit connection/read timeouts, hop-by-hop header stripping, and structured downstream-error mapping.
-4. **Next:** add Redis infrastructure, then an atomic fixed-window limiter followed by token bucket.
-5. Add idempotency-aware retries and a testable `CLOSED` / `OPEN` / `HALF_OPEN` circuit breaker.
-6. Add bounded workers, bounded priority queues, and predictable overload rejection.
-7. Add idempotency semantics, Kafka events, observability, expanded tests, measured load testing, production-like Compose, and CI in that order.
+4. **Complete:** Redis connectivity via Spring Data Redis (Lettuce), `StringRedisTemplate`, and Actuator health check integration.
+5. **Next:** add an atomic fixed-window limiter followed by token bucket using Redis.
+6. Add idempotency-aware retries and a testable `CLOSED` / `OPEN` / `HALF_OPEN` circuit breaker.
+7. Add bounded workers, bounded priority queues, and predictable overload rejection.
+8. Add idempotency semantics, Kafka events, observability, expanded tests, measured load testing, production-like Compose, and CI in that order.
 
 Each phase must compile, pass relevant tests, update this document and the API contract, and state its trade-offs. No current document makes unmeasured performance claims.

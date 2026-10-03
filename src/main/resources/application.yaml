@@ -5,6 +5,15 @@ spring:
     url: ${AEGIS_DATASOURCE_URL:jdbc:postgresql://localhost:5432/aegis}
     username: ${AEGIS_DATASOURCE_USERNAME:aegis}
     password: ${AEGIS_DATASOURCE_PASSWORD:aegis}
+  data:
+    redis:
+      host: ${AEGIS_REDIS_HOST:localhost}
+      port: ${AEGIS_REDIS_PORT:6379}
+      password: ${AEGIS_REDIS_PASSWORD:}
+      ssl:
+        enabled: ${AEGIS_REDIS_SSL:false}
+      timeout: ${AEGIS_REDIS_TIMEOUT:2000ms}
+      connect-timeout: ${AEGIS_REDIS_CONNECT_TIMEOUT:2000ms}
   jpa:
     open-in-view: false
     hibernate:
@@ -49,3 +58,6 @@ aegis:
   proxy:
     connect-timeout-ms: ${AEGIS_PROXY_CONNECT_TIMEOUT_MS:3000}
     default-read-timeout-ms: ${AEGIS_PROXY_DEFAULT_READ_TIMEOUT_MS:10000}
+  redis:
+    key-prefix: ${AEGIS_REDIS_KEY_PREFIX:aegis:}
+

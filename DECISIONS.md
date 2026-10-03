@@ -20,15 +20,15 @@
 
 **Trade-off:** Even small schema changes need a migration.
 
-## D3. PostgreSQL now; Redis and Kafka when their state model is needed
+## D3. PostgreSQL for relational persistence; Redis added in Phase 4 for short-lived state
 
-**Decision:** Docker Compose currently runs PostgreSQL only. Routes are stored in PostgreSQL; Redis and Kafka are deferred.
+**Decision:** Routes and user accounts are stored in PostgreSQL; Redis is introduced in Phase 4 for low-latency shared state. Kafka remains deferred until asynchronous event processing is needed.
 
-**Reason:** Route definitions are durable, infrequently changed configuration. Redis is for shared short-lived state and Kafka for asynchronous events, neither of which the current API requires.
+**Reason:** Route definitions and user credentials are durable configuration suited for PostgreSQL. Redis provides the low-latency, key-value primitives required for rate-limiting (Phase 5) and idempotency coordination (Phase 9).
 
-**Alternative:** Start the full future infrastructure stack immediately.
+**Alternative:** Start the full future infrastructure stack (including Kafka and Prometheus) immediately.
 
-**Trade-off:** The local topology is intentionally incomplete until the matching phases.
+**Trade-off:** Adds a Redis container requirement to local execution and Testcontainers integration tests.
 
 ## D4. Permit-all security is a temporary phase boundary
 
@@ -87,3 +87,14 @@
 **Alternative:** Forwarding all headers without filtering.
 
 **Trade-off:** Application-level headers (e.g. `Authorization`, `Content-Type`) are still forwarded. A future phase may introduce an explicit allow-list if SSRF or header-injection concerns grow.
+
+## D10. Spring Data Redis with Lettuce for shared state and Actuator health check
+
+**Decision:** Add `spring-boot-starter-data-redis` using Lettuce as the connection driver, expose `StringRedisTemplate`, and monitor connection status via Spring Boot Actuator's `RedisHealthIndicator`.
+
+**Reason:** Lettuce is Spring Boot's default non-blocking Redis driver. Exposing `StringRedisTemplate` provides a thread-safe, string-oriented interface ready for distributed rate limiting in Phase 5. Actuator integration ensures operational visibility into Redis health alongside PostgreSQL.
+
+**Alternative:** Custom Jedis connection factory or delayed Redis bean setup until Phase 5.
+
+**Trade-off:** Requires Redis configuration properties (`spring.data.redis.*` and `aegis.redis.*`) and running a Redis instance or Testcontainer for full integration testing.
+

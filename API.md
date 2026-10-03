@@ -38,7 +38,7 @@ GET /api/v1/status
 GET /actuator/health
 ```
 
-`/api/v1/status` is the simple application status endpoint. `/actuator/health` is the Spring Boot health endpoint.
+`/api/v1/status` is the simple application status endpoint. `/actuator/health` is the Spring Boot health endpoint, which monitors connectivity to both PostgreSQL (`db`) and Redis (`redis`).
 
 ### Routes
 

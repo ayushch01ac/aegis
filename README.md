@@ -4,7 +4,7 @@ Aegis is a Java 21 / Spring Boot platform being built to manage API traffic, dow
 
 ## Current status
 
-**Phase 0 (foundation), Phase 1 (route management), Phase 2 (authentication and authorization), and Phase 3 (controlled downstream proxy) are complete.** The application can now forward HTTP traffic to configured downstream services with explicit per-route timeouts.
+**Phase 0 (foundation), Phase 1 (route management), Phase 2 (authentication and authorization), Phase 3 (controlled downstream proxy), and Phase 4 (Redis connectivity and health checks) are complete.** The application can now forward HTTP traffic to configured downstream services with explicit per-route timeouts, and connects to Redis with Actuator health monitoring.
 
 Implemented:
 
@@ -14,32 +14,33 @@ Implemented:
 - HMAC-signed JWT issuance with BCrypt password verification
 - `ADMIN`, `OPERATOR`, and `VIEWER` role enforcement for route and proxy APIs
 - Structured JSON errors and `X-Request-Id` correlation
-- Actuator health endpoint and OpenAPI/Swagger UI
+- Actuator health endpoint (monitoring PostgreSQL and Redis) and OpenAPI/Swagger UI
 - Controlled downstream HTTP proxy at `/api/v1/proxy/{routeName}/**` with per-route explicit timeouts
 - Hop-by-hop header stripping and `X-Request-Id` forwarding on proxy calls
 - Structured error codes for disabled routes (`ROUTE_DISABLED`) and downstream failures (`DOWNSTREAM_ERROR`)
-- Unit, controller-slice, and PostgreSQL Testcontainers integration tests
+- Redis connectivity via Spring Data Redis (Lettuce), `StringRedisTemplate`, and Actuator health check integration
+- Unit, controller-slice, and PostgreSQL/Redis Testcontainers integration tests
 
-Not implemented yet: Redis, rate limiting, retries, circuit breaking, bounded request execution, idempotency, Kafka, Prometheus/Grafana, load tests, container image packaging, and CI.
+Not implemented yet: rate limiting, retries, circuit breaking, bounded request execution, idempotency, Kafka, Prometheus/Grafana, load tests, container image packaging, and CI.
 
 ## Requirements
 
 - Java 21
 - Maven 3.9+ (or the included `./mvnw`)
-- Docker, for local PostgreSQL and Testcontainers-backed integration tests
+- Docker, for local PostgreSQL/Redis and Testcontainers-backed integration tests
 
 ## Local setup
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres
+docker compose up -d postgres redis
 ./mvnw verify
 ./mvnw spring-boot:run
 ```
 
 The application reads configuration from environment variables. `.env.example` contains local-development values; copy it to `.env` and do not commit real credentials.
 
-`./mvnw test` runs the unit and MVC tests. `./mvnw verify` additionally runs the PostgreSQL Testcontainers integration tests.
+`./mvnw test` runs the unit and MVC tests. `./mvnw verify` additionally runs the PostgreSQL and Redis Testcontainers integration tests.
 
 Useful endpoints:
 
@@ -60,7 +61,7 @@ The future design is intentionally phased so each increment stays runnable, test
 | 1 | Route management: configuration CRUD, validation, OpenAPI | Complete |
 | 2 | JWT authentication and ADMIN/OPERATOR/VIEWER authorization | Complete |
 | 3 | Controlled downstream HTTP proxy with timeouts | Complete |
-| 4 | Redis connectivity and health checks | Planned |
+| 4 | Redis connectivity and health checks | Complete |
 | 5 | Distributed fixed-window then token-bucket rate limiting | Planned |
 | 6 | Configured, idempotency-aware retries | Planned |
 | 7 | Testable circuit breaker | Planned |
