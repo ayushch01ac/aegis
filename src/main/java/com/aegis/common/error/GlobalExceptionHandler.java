@@ -22,7 +22,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AegisException.class)
     public ResponseEntity<ApiError> handleAegisException(AegisException exception) {
-        return error(exception.getStatus(), exception.getCode(), exception.getMessage(), Map.of());
+        ApiError body = new ApiError(
+                Instant.now(),
+                exception.getStatus().value(),
+                exception.getCode(),
+                exception.getMessage(),
+                MDC.get(RequestId.MDC_KEY),
+                null);
+        return ResponseEntity.status(exception.getStatus())
+                .headers(exception.getHeaders())
+                .body(body);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

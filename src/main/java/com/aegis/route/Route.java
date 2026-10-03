@@ -1,5 +1,6 @@
 package com.aegis.route;
 
+import com.aegis.ratelimit.RateLimitAlgorithm;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -34,6 +35,19 @@ public class Route {
     @Column(nullable = false)
     private boolean enabled;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rate_limit_algorithm", length = 30)
+    private RateLimitAlgorithm rateLimitAlgorithm;
+
+    @Column(name = "rate_limit_capacity")
+    private Integer rateLimitCapacity;
+
+    @Column(name = "rate_limit_window_seconds")
+    private Integer rateLimitWindowSeconds;
+
+    @Column(name = "rate_limit_refill_rate")
+    private Integer rateLimitRefillRate;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -42,13 +56,30 @@ public class Route {
 
     protected Route() {}
 
-    public Route(String name, String baseUrl, int timeoutMs, RoutePriority priority, boolean enabled) {
+    public Route(
+            String name,
+            String baseUrl,
+            int timeoutMs,
+            RoutePriority priority,
+            boolean enabled,
+            RateLimitAlgorithm rateLimitAlgorithm,
+            Integer rateLimitCapacity,
+            Integer rateLimitWindowSeconds,
+            Integer rateLimitRefillRate) {
         this.id = UUID.randomUUID();
         this.name = name;
         this.baseUrl = baseUrl;
         this.timeoutMs = timeoutMs;
         this.priority = priority;
         this.enabled = enabled;
+        this.rateLimitAlgorithm = rateLimitAlgorithm;
+        this.rateLimitCapacity = rateLimitCapacity;
+        this.rateLimitWindowSeconds = rateLimitWindowSeconds;
+        this.rateLimitRefillRate = rateLimitRefillRate;
+    }
+
+    public Route(String name, String baseUrl, int timeoutMs, RoutePriority priority, boolean enabled) {
+        this(name, baseUrl, timeoutMs, priority, enabled, null, null, null, null);
     }
 
     @PrePersist
@@ -63,12 +94,29 @@ public class Route {
         this.updatedAt = Instant.now();
     }
 
-    public void applyUpdate(String name, String baseUrl, int timeoutMs, RoutePriority priority, boolean enabled) {
+    public void applyUpdate(
+            String name,
+            String baseUrl,
+            int timeoutMs,
+            RoutePriority priority,
+            boolean enabled,
+            RateLimitAlgorithm rateLimitAlgorithm,
+            Integer rateLimitCapacity,
+            Integer rateLimitWindowSeconds,
+            Integer rateLimitRefillRate) {
         this.name = name;
         this.baseUrl = baseUrl;
         this.timeoutMs = timeoutMs;
         this.priority = priority;
         this.enabled = enabled;
+        this.rateLimitAlgorithm = rateLimitAlgorithm;
+        this.rateLimitCapacity = rateLimitCapacity;
+        this.rateLimitWindowSeconds = rateLimitWindowSeconds;
+        this.rateLimitRefillRate = rateLimitRefillRate;
+    }
+
+    public void applyUpdate(String name, String baseUrl, int timeoutMs, RoutePriority priority, boolean enabled) {
+        applyUpdate(name, baseUrl, timeoutMs, priority, enabled, null, null, null, null);
     }
 
     public UUID getId() {
@@ -93,6 +141,22 @@ public class Route {
 
     public boolean isEnabled() {
         return enabled;
+    }
+
+    public RateLimitAlgorithm getRateLimitAlgorithm() {
+        return rateLimitAlgorithm;
+    }
+
+    public Integer getRateLimitCapacity() {
+        return rateLimitCapacity;
+    }
+
+    public Integer getRateLimitWindowSeconds() {
+        return rateLimitWindowSeconds;
+    }
+
+    public Integer getRateLimitRefillRate() {
+        return rateLimitRefillRate;
     }
 
     public Instant getCreatedAt() {

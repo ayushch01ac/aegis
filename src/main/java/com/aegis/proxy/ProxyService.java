@@ -9,6 +9,9 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import com.aegis.ratelimit.RateLimitExceededException;
+import com.aegis.ratelimit.RateLimitResult;
+import com.aegis.ratelimit.RateLimitService;
 import com.aegis.route.Route;
 import com.aegis.route.RouteNotFoundException;
 import com.aegis.route.RouteRepository;
@@ -20,12 +23,10 @@ import com.aegis.route.RouteRepository;
  * <ol>
  *   <li>Look up the named route; throw {@link RouteNotFoundException} when absent.</li>
  *   <li>Reject disabled routes with {@link RouteDisabledException}.</li>
+ *   <li>Evaluate Redis distributed rate limiting via {@link RateLimitService}.</li>
  *   <li>Compose the downstream URI by appending {@code pathSuffix} to the route base URL.</li>
  *   <li>Delegate the HTTP call to {@link DownstreamHttpClient} with the route's own timeout.</li>
  * </ol>
- *
- * <p>The service does not inspect or modify the downstream response body; it is passed through
- * verbatim by {@link ProxyController}.
  */
 @Service
 public class ProxyService {
@@ -34,10 +35,15 @@ public class ProxyService {
 
     private final RouteRepository routeRepository;
     private final DownstreamHttpClient httpClient;
+    private final RateLimitService rateLimitService;
 
-    public ProxyService(RouteRepository routeRepository, DownstreamHttpClient httpClient) {
+    public ProxyService(
+            RouteRepository routeRepository,
+            DownstreamHttpClient httpClient,
+            RateLimitService rateLimitService) {
         this.routeRepository = routeRepository;
         this.httpClient = httpClient;
+        this.rateLimitService = rateLimitService;
     }
 
     /**
@@ -67,14 +73,28 @@ public class ProxyService {
             throw new RouteDisabledException(routeName);
         }
 
+        RateLimitResult rateLimitResult = rateLimitService.evaluateRateLimit(route);
+        if (!rateLimitResult.allowed()) {
+            throw new RateLimitExceededException(routeName, rateLimitResult);
+        }
+
         URI downstream = buildUri(route.getBaseUrl(), pathSuffix, queryString, routeName);
         log.info("Proxy route={} method={} uri={}", routeName, method, downstream);
 
-        return httpClient.forward(method, downstream, headers, body, routeName, route.getTimeoutMs());
+        ResponseEntity<byte[]> response = httpClient.forward(
+                method, downstream, headers, body, routeName, route.getTimeoutMs());
+
+        HttpHeaders responseHeaders = new HttpHeaders();
+        responseHeaders.putAll(response.getHeaders());
+        responseHeaders.set("X-RateLimit-Limit", String.valueOf(rateLimitResult.limit()));
+        responseHeaders.set("X-RateLimit-Remaining", String.valueOf(rateLimitResult.remaining()));
+
+        return ResponseEntity.status(response.getStatusCode())
+                .headers(responseHeaders)
+                .body(response.getBody());
     }
 
     private static URI buildUri(String baseUrl, String pathSuffix, String queryString, String routeName) {
-        // Strip trailing slash from base, ensure suffix starts with / when non-empty.
         String base = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         String suffix = (pathSuffix == null || pathSuffix.isBlank()) ? "" : pathSuffix;
         if (!suffix.isEmpty() && !suffix.startsWith("/")) {
@@ -84,7 +104,6 @@ public class ProxyService {
         try {
             return new URI(raw);
         } catch (URISyntaxException ex) {
-            // The base URL was validated at route creation; this should not occur in practice.
             throw new DownstreamException(routeName, "Could not build downstream URI: " + ex.getMessage());
         }
     }

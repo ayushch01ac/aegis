@@ -25,7 +25,11 @@ public class RouteService {
                 request.baseUrl(),
                 request.timeoutMs(),
                 request.priority(),
-                request.enabledOrDefault());
+                request.enabledOrDefault(),
+                request.rateLimitAlgorithm(),
+                request.rateLimitCapacity(),
+                request.rateLimitWindowSeconds(),
+                request.rateLimitRefillRate());
         return RouteResponse.from(routeRepository.save(route));
     }
 
@@ -50,7 +54,11 @@ public class RouteService {
                 request.baseUrl(),
                 request.timeoutMs(),
                 request.priority(),
-                request.enabledOrDefault());
+                request.enabledOrDefault(),
+                request.rateLimitAlgorithm(),
+                request.rateLimitCapacity(),
+                request.rateLimitWindowSeconds(),
+                request.rateLimitRefillRate());
         return RouteResponse.from(route);
     }
 

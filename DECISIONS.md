@@ -66,6 +66,8 @@
 
 **Reason:** Aegis is intentionally incremental; presenting planned Redis, Kafka, or reliability features as complete would be misleading.
 
+**Alternative:** Forwarding all headers without filtering.
+
 **Trade-off:** Documentation repeats the phase boundary in several places to keep the project explainable.
 
 ## D8. RestClient with SimpleClientHttpRequestFactory for the proxy
@@ -98,3 +100,12 @@
 
 **Trade-off:** Requires Redis configuration properties (`spring.data.redis.*` and `aegis.redis.*`) and running a Redis instance or Testcontainer for full integration testing.
 
+## D11. Redis Lua scripts for atomic distributed fixed-window and token-bucket rate limiting
+
+**Decision:** Implement fixed-window and token-bucket rate limiting using custom Redis Lua scripts via Spring's `StringRedisTemplate`.
+
+**Reason:** Multi-step read-calculate-write rate limit updates in distributed environments suffer from race conditions. Executing logic in Redis Lua scripts guarantees atomic evaluation across horizontally scaled Aegis instances without requiring distributed locks.
+
+**Alternative:** In-memory rate limiting (Guava/Bucket4j in-JVM) or Redis client-side distributed locks.
+
+**Trade-off:** Lua scripts execute synchronously inside Redis; script complexity must remain minimal to avoid blocking the Redis event loop.

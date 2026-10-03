@@ -60,4 +60,12 @@ aegis:
     default-read-timeout-ms: ${AEGIS_PROXY_DEFAULT_READ_TIMEOUT_MS:10000}
   redis:
     key-prefix: ${AEGIS_REDIS_KEY_PREFIX:aegis:}
+  rate-limit:
+    enabled: ${AEGIS_RATE_LIMIT_ENABLED:true}
+    default-algorithm: ${AEGIS_RATE_LIMIT_DEFAULT_ALGORITHM:FIXED_WINDOW}
+    default-capacity: ${AEGIS_RATE_LIMIT_DEFAULT_CAPACITY:100}
+    default-window-seconds: ${AEGIS_RATE_LIMIT_DEFAULT_WINDOW_SECONDS:60}
+    default-refill-rate: ${AEGIS_RATE_LIMIT_DEFAULT_REFILL_RATE:10}
+    fail-open: ${AEGIS_RATE_LIMIT_FAIL_OPEN:false}
+
 

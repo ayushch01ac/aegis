@@ -2,11 +2,15 @@ package com.aegis.proxy;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.aegis.ratelimit.RateLimitExceededException;
+import com.aegis.ratelimit.RateLimitResult;
+import com.aegis.ratelimit.RateLimitService;
 import com.aegis.route.Route;
-import com.aegis.route.RoutePriority;
 import com.aegis.route.RouteNotFoundException;
+import com.aegis.route.RoutePriority;
 import com.aegis.route.RouteRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -27,6 +31,9 @@ class ProxyServiceTest {
 
     @Mock
     private DownstreamHttpClient httpClient;
+
+    @Mock
+    private RateLimitService rateLimitService;
 
     @InjectMocks
     private ProxyService proxyService;
@@ -52,9 +59,22 @@ class ProxyServiceTest {
     }
 
     @Test
+    void rateLimitExceededThrowsRateLimitExceededException() {
+        Route route = new Route("orders", "http://orders:8080", 2000, RoutePriority.HIGH, true);
+        when(routeRepository.findByName("orders")).thenReturn(Optional.of(route));
+        when(rateLimitService.evaluateRateLimit(route)).thenReturn(RateLimitResult.reject(10, 5));
+
+        assertThatThrownBy(() -> proxyService.proxy(
+                "orders", "", null, HttpMethod.GET, new HttpHeaders(), null))
+                .isInstanceOf(RateLimitExceededException.class)
+                .hasMessageContaining("orders");
+    }
+
+    @Test
     void enabledRouteForwardsToClient() {
         Route route = new Route("orders", "http://orders:8080", 2000, RoutePriority.HIGH, true);
         when(routeRepository.findByName("orders")).thenReturn(Optional.of(route));
+        when(rateLimitService.evaluateRateLimit(route)).thenReturn(RateLimitResult.allow(100, 99));
 
         HttpHeaders responseHeaders = new HttpHeaders();
         ResponseEntity<byte[]> downstreamResponse =
@@ -69,12 +89,15 @@ class ProxyServiceTest {
                 "orders", "", null, HttpMethod.GET, clientHeaders, null);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getHeaders().getFirst("X-RateLimit-Limit")).isEqualTo("100");
+        assertThat(result.getHeaders().getFirst("X-RateLimit-Remaining")).isEqualTo("99");
     }
 
     @Test
     void pathSuffixIsAppendedToBaseUrl() {
         Route route = new Route("orders", "http://orders:8080", 2000, RoutePriority.HIGH, true);
         when(routeRepository.findByName("orders")).thenReturn(Optional.of(route));
+        when(rateLimitService.evaluateRateLimit(route)).thenReturn(RateLimitResult.allow(100, 99));
 
         ResponseEntity<byte[]> downstreamResponse = ResponseEntity.ok().body(new byte[]{});
         HttpHeaders clientHeaders = new HttpHeaders();
@@ -93,6 +116,7 @@ class ProxyServiceTest {
     void queryStringIsAppendedToUri() {
         Route route = new Route("search", "http://search:9200", 3000, RoutePriority.NORMAL, true);
         when(routeRepository.findByName("search")).thenReturn(Optional.of(route));
+        when(rateLimitService.evaluateRateLimit(route)).thenReturn(RateLimitResult.allow(100, 99));
 
         ResponseEntity<byte[]> downstreamResponse = ResponseEntity.ok().body(new byte[]{});
         HttpHeaders clientHeaders = new HttpHeaders();
@@ -109,9 +133,9 @@ class ProxyServiceTest {
 
     @Test
     void trailingSlashOnBaseUrlIsNormalized() {
-        // Routes with a trailing slash in baseUrl must not produce double-slashes.
         Route route = new Route("items", "http://items:8080/", 1000, RoutePriority.LOW, true);
         when(routeRepository.findByName("items")).thenReturn(Optional.of(route));
+        when(rateLimitService.evaluateRateLimit(route)).thenReturn(RateLimitResult.allow(100, 99));
 
         ResponseEntity<byte[]> downstreamResponse = ResponseEntity.ok().body(new byte[]{});
         HttpHeaders clientHeaders = new HttpHeaders();

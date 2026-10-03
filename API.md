@@ -60,7 +60,11 @@ Create or update body:
   "baseUrl": "http://orders:8080",
   "timeoutMs": 2000,
   "priority": "HIGH",
-  "enabled": true
+  "enabled": true,
+  "rateLimitAlgorithm": "TOKEN_BUCKET",
+  "rateLimitCapacity": 100,
+  "rateLimitWindowSeconds": 60,
+  "rateLimitRefillRate": 10
 }
 ```
 
@@ -71,6 +75,10 @@ Rules:
 - `timeoutMs` is between 1 and 120000.
 - `priority` is `CRITICAL`, `HIGH`, `NORMAL`, or `LOW`.
 - Omitted `enabled` defaults to `true`.
+- `rateLimitAlgorithm` is optional (`FIXED_WINDOW` or `TOKEN_BUCKET`).
+- `rateLimitCapacity` is optional (1–1,000,000). Max permits/tokens.
+- `rateLimitWindowSeconds` is optional (1–86,400). Window size for fixed-window.
+- `rateLimitRefillRate` is optional (1–1,000,000). Refill rate in tokens/sec for token-bucket.
 
 Create returns `201 Created` and `Location: /api/v1/routes/{id}`. Delete returns `204 No Content`.
 
@@ -86,6 +94,10 @@ ANY /api/v1/proxy/{routeName}/**
 
 Any HTTP method is accepted. The path after `{routeName}` is appended to the route's `baseUrl`. Query strings are forwarded. The `X-Request-Id` correlation header is forwarded to the downstream service.
 
+Response headers added by Aegis:
+- `X-RateLimit-Limit`: Maximum allowed limit or bucket capacity
+- `X-RateLimit-Remaining`: Remaining permitted requests or tokens
+
 Examples:
 
 ```http
@@ -97,6 +109,7 @@ Rules:
 
 - `ADMIN`, `OPERATOR`, and `VIEWER` may send proxy requests.
 - The route must be enabled; disabled routes return `503 ROUTE_DISABLED`.
+- Exceeding the route's rate limit returns `429 RATE_LIMIT_EXCEEDED` with a `Retry-After` header.
 - Network failures, connect timeouts, and read timeouts return `502 DOWNSTREAM_ERROR`.
 - Per-route `timeoutMs` is used as the read-side deadline. Connect timeout is controlled by `AEGIS_PROXY_CONNECT_TIMEOUT_MS` (default 3 000 ms).
 
@@ -112,18 +125,28 @@ Rules:
 | 401 | `INVALID_CREDENTIALS` | Username/password authentication failed |
 | 401 | `UNAUTHORIZED` | A protected endpoint has no valid JWT |
 | 403 | `ACCESS_DENIED` | JWT role cannot perform the action |
+| 429 | `RATE_LIMIT_EXCEEDED` | Request rate limit for the target route was exceeded |
 | 503 | `ROUTE_DISABLED` | The proxy target route is currently disabled |
 | 502 | `DOWNSTREAM_ERROR` | The downstream call timed out or failed |
 | 500 | `INTERNAL_ERROR` | An unexpected failure occurred |
 
-Example:
+Example rate limit error response:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+X-RateLimit-Limit: 10
+X-RateLimit-Remaining: 0
+Retry-After: 5
+X-Request-Id: req-123
+```
 
 ```json
 {
   "timestamp": "2026-10-03T10:00:00Z",
-  "status": 502,
-  "code": "DOWNSTREAM_ERROR",
-  "message": "Downstream call failed for route: orders-service",
+  "status": 429,
+  "code": "RATE_LIMIT_EXCEEDED",
+  "message": "Rate limit exceeded for route: orders-service. Try again in 5 seconds.",
   "requestId": "req-123",
   "fieldErrors": null
 }
@@ -133,4 +156,4 @@ OpenAPI is available at `/v3/api-docs`; Swagger UI is available at `/swagger-ui.
 
 ## Planned API boundaries
 
-The following are design directions, not available endpoints: per-route rate-limit policy configuration and idempotency-key support for selected side-effecting operations. Their exact paths and schemas will be documented only when the corresponding phases are implemented.
+The following are design directions, not available endpoints: idempotency-key support for selected side-effecting operations. Their exact paths and schemas will be documented only when the corresponding phases are implemented.
