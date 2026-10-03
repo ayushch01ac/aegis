@@ -67,3 +67,23 @@
 **Reason:** Aegis is intentionally incremental; presenting planned Redis, Kafka, or reliability features as complete would be misleading.
 
 **Trade-off:** Documentation repeats the phase boundary in several places to keep the project explainable.
+
+## D8. RestClient with SimpleClientHttpRequestFactory for the proxy
+
+**Decision:** Use Spring's `RestClient` backed by `SimpleClientHttpRequestFactory` for downstream calls.
+
+**Reason:** `RestClient` is the modern Spring replacement for `RestTemplate` and supports the `retrieve()` / `toEntity()` flow needed to pass status and headers through verbatim. `SimpleClientHttpRequestFactory` requires no additional dependencies; connection pooling and keep-alive behaviour are provided by the JDK. Phase 3 does not need to maximise throughput, only to enforce timeouts correctly.
+
+**Alternative:** Apache HttpComponents `HttpAsyncClient` (non-blocking) or `HttpClient` (pooled, synchronous).
+
+**Trade-off:** The JDK factory creates a new connection for each request in the default configuration, so throughput under sustained load is lower than a pooled client. A future phase (bounded concurrency or load testing) is the right place to introduce pooling with a demonstrated need.
+
+## D9. Hop-by-hop headers are stripped before forwarding
+
+**Decision:** Remove `Host`, `Connection`, `Keep-Alive`, `Proxy-Authorization`, `TE`, `Trailers`, `Transfer-Encoding`, and `Upgrade` before forwarding the client request to the downstream service.
+
+**Reason:** These headers are meaningful only for the Aegis–client leg and must not be forwarded per HTTP/1.1 semantics (RFC 7230 §6.1). Forwarding them can confuse the downstream server or leak internal connection parameters.
+
+**Alternative:** Forwarding all headers without filtering.
+
+**Trade-off:** Application-level headers (e.g. `Authorization`, `Content-Type`) are still forwarded. A future phase may introduce an explicit allow-list if SSRF or header-injection concerns grow.

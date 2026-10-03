@@ -46,3 +46,6 @@ aegis:
     bootstrap-admin:
       username: ${AEGIS_BOOTSTRAP_ADMIN_USERNAME:}
       password: ${AEGIS_BOOTSTRAP_ADMIN_PASSWORD:}
+  proxy:
+    connect-timeout-ms: ${AEGIS_PROXY_CONNECT_TIMEOUT_MS:3000}
+    default-read-timeout-ms: ${AEGIS_PROXY_DEFAULT_READ_TIMEOUT_MS:10000}

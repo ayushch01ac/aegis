@@ -4,7 +4,7 @@
 
 Aegis is an interview-quality Java backend project for API reliability and traffic management. Build it incrementally for clarity, correctness, and technical discussion—not to add every technology at once.
 
-Phase 0 (foundation), Phase 1 (route management), and Phase 2 (authentication and authorization) are complete. The next planned phase is a controlled downstream proxy. `README.md`, `ARCHITECTURE.md`, `API.md`, and `DECISIONS.md` are the repository's record of actual implementation; future architecture is a plan, not permission to implement unrelated phases.
+Phase 0 (foundation), Phase 1 (route management), Phase 2 (authentication and authorization), and Phase 3 (controlled downstream proxy) are complete. The next planned phase is Redis integration and distributed rate limiting. `README.md`, `ARCHITECTURE.md`, `API.md`, and `DECISIONS.md` are the repository's record of actual implementation; future architecture is a plan, not permission to implement unrelated phases.
 
 ## Before changing code
 

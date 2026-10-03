@@ -1,0 +1,128 @@
+package com.aegis.proxy;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
+
+import com.aegis.route.Route;
+import com.aegis.route.RoutePriority;
+import com.aegis.route.RouteNotFoundException;
+import com.aegis.route.RouteRepository;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+
+@ExtendWith(MockitoExtension.class)
+class ProxyServiceTest {
+
+    @Mock
+    private RouteRepository routeRepository;
+
+    @Mock
+    private DownstreamHttpClient httpClient;
+
+    @InjectMocks
+    private ProxyService proxyService;
+
+    @Test
+    void missingRouteThrowsRouteNotFoundException() {
+        when(routeRepository.findByName("unknown")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> proxyService.proxy(
+                "unknown", "", null, HttpMethod.GET, new HttpHeaders(), null))
+                .isInstanceOf(RouteNotFoundException.class);
+    }
+
+    @Test
+    void disabledRouteThrowsRouteDisabledException() {
+        Route disabled = new Route("svc", "http://svc:8080", 2000, RoutePriority.NORMAL, false);
+        when(routeRepository.findByName("svc")).thenReturn(Optional.of(disabled));
+
+        assertThatThrownBy(() -> proxyService.proxy(
+                "svc", "", null, HttpMethod.GET, new HttpHeaders(), null))
+                .isInstanceOf(RouteDisabledException.class)
+                .hasMessageContaining("svc");
+    }
+
+    @Test
+    void enabledRouteForwardsToClient() {
+        Route route = new Route("orders", "http://orders:8080", 2000, RoutePriority.HIGH, true);
+        when(routeRepository.findByName("orders")).thenReturn(Optional.of(route));
+
+        HttpHeaders responseHeaders = new HttpHeaders();
+        ResponseEntity<byte[]> downstreamResponse =
+                ResponseEntity.ok().headers(responseHeaders).body(new byte[]{});
+        HttpHeaders clientHeaders = new HttpHeaders();
+
+        when(httpClient.forward(HttpMethod.GET, java.net.URI.create("http://orders:8080"),
+                clientHeaders, null, "orders", 2000))
+                .thenReturn(downstreamResponse);
+
+        ResponseEntity<byte[]> result = proxyService.proxy(
+                "orders", "", null, HttpMethod.GET, clientHeaders, null);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void pathSuffixIsAppendedToBaseUrl() {
+        Route route = new Route("orders", "http://orders:8080", 2000, RoutePriority.HIGH, true);
+        when(routeRepository.findByName("orders")).thenReturn(Optional.of(route));
+
+        ResponseEntity<byte[]> downstreamResponse = ResponseEntity.ok().body(new byte[]{});
+        HttpHeaders clientHeaders = new HttpHeaders();
+
+        when(httpClient.forward(HttpMethod.GET, java.net.URI.create("http://orders:8080/orders/42"),
+                clientHeaders, null, "orders", 2000))
+                .thenReturn(downstreamResponse);
+
+        ResponseEntity<byte[]> result = proxyService.proxy(
+                "orders", "/orders/42", null, HttpMethod.GET, clientHeaders, null);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void queryStringIsAppendedToUri() {
+        Route route = new Route("search", "http://search:9200", 3000, RoutePriority.NORMAL, true);
+        when(routeRepository.findByName("search")).thenReturn(Optional.of(route));
+
+        ResponseEntity<byte[]> downstreamResponse = ResponseEntity.ok().body(new byte[]{});
+        HttpHeaders clientHeaders = new HttpHeaders();
+
+        when(httpClient.forward(HttpMethod.GET, java.net.URI.create("http://search:9200/_search?q=aegis"),
+                clientHeaders, null, "search", 3000))
+                .thenReturn(downstreamResponse);
+
+        ResponseEntity<byte[]> result = proxyService.proxy(
+                "search", "/_search", "q=aegis", HttpMethod.GET, clientHeaders, null);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void trailingSlashOnBaseUrlIsNormalized() {
+        // Routes with a trailing slash in baseUrl must not produce double-slashes.
+        Route route = new Route("items", "http://items:8080/", 1000, RoutePriority.LOW, true);
+        when(routeRepository.findByName("items")).thenReturn(Optional.of(route));
+
+        ResponseEntity<byte[]> downstreamResponse = ResponseEntity.ok().body(new byte[]{});
+        HttpHeaders clientHeaders = new HttpHeaders();
+
+        when(httpClient.forward(HttpMethod.GET, java.net.URI.create("http://items:8080/v1/items"),
+                clientHeaders, null, "items", 1000))
+                .thenReturn(downstreamResponse);
+
+        ResponseEntity<byte[]> result = proxyService.proxy(
+                "items", "/v1/items", null, HttpMethod.GET, clientHeaders, null);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+}

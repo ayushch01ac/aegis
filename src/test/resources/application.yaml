@@ -5,3 +5,6 @@ aegis:
     bootstrap-admin:
       username: test-admin
       password: test-password-not-for-production
+  proxy:
+    connect-timeout-ms: 3000
+    default-read-timeout-ms: 10000

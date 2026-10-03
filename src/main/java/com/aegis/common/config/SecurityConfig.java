@@ -49,6 +49,8 @@ public class SecurityConfig {
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/routes", "/api/v1/routes/**")
                         .hasRole("ADMIN")
+                        .requestMatchers("/api/v1/proxy/**")
+                        .hasAnyRole("ADMIN", "OPERATOR", "VIEWER")
                         .anyRequest()
                         .authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))

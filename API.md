@@ -76,6 +76,30 @@ Create returns `201 Created` and `Location: /api/v1/routes/{id}`. Delete returns
 
 List requests accept `page` (zero based) and `size`; the maximum size is 100. The response contains `content`, `page`, `size`, `totalElements`, and `totalPages`.
 
+### Proxy
+
+Forwards a live request to the downstream service registered under the given route name. The route must exist and be enabled. The downstream HTTP status, headers, and body are returned verbatim; hop-by-hop headers are stripped.
+
+```http
+ANY /api/v1/proxy/{routeName}/**
+```
+
+Any HTTP method is accepted. The path after `{routeName}` is appended to the route's `baseUrl`. Query strings are forwarded. The `X-Request-Id` correlation header is forwarded to the downstream service.
+
+Examples:
+
+```http
+GET  /api/v1/proxy/orders-service/orders/42
+POST /api/v1/proxy/payments-service/payments?idempotencyKey=abc
+```
+
+Rules:
+
+- `ADMIN`, `OPERATOR`, and `VIEWER` may send proxy requests.
+- The route must be enabled; disabled routes return `503 ROUTE_DISABLED`.
+- Network failures, connect timeouts, and read timeouts return `502 DOWNSTREAM_ERROR`.
+- Per-route `timeoutMs` is used as the read-side deadline. Connect timeout is controlled by `AEGIS_PROXY_CONNECT_TIMEOUT_MS` (default 3 000 ms).
+
 ### Errors
 
 | Status | Code | Meaning |
@@ -83,21 +107,23 @@ List requests accept `page` (zero based) and `size`; the maximum size is 100. Th
 | 400 | `VALIDATION_ERROR` | A request field failed validation |
 | 400 | `MALFORMED_REQUEST` | JSON body is missing or unreadable |
 | 400 | `INVALID_PARAMETER` | A path or query parameter has an invalid type |
-| 404 | `ROUTE_NOT_FOUND` | The route ID does not exist |
+| 404 | `ROUTE_NOT_FOUND` | The route ID or name does not exist |
 | 409 | `ROUTE_NAME_CONFLICT` | Another route already uses the name |
 | 401 | `INVALID_CREDENTIALS` | Username/password authentication failed |
 | 401 | `UNAUTHORIZED` | A protected endpoint has no valid JWT |
 | 403 | `ACCESS_DENIED` | JWT role cannot perform the action |
+| 503 | `ROUTE_DISABLED` | The proxy target route is currently disabled |
+| 502 | `DOWNSTREAM_ERROR` | The downstream call timed out or failed |
 | 500 | `INTERNAL_ERROR` | An unexpected failure occurred |
 
 Example:
 
 ```json
 {
-  "timestamp": "2026-10-02T12:00:00Z",
-  "status": 409,
-  "code": "ROUTE_NAME_CONFLICT",
-  "message": "Route name already exists: orders-service",
+  "timestamp": "2026-10-03T10:00:00Z",
+  "status": 502,
+  "code": "DOWNSTREAM_ERROR",
+  "message": "Downstream call failed for route: orders-service",
   "requestId": "req-123",
   "fieldErrors": null
 }
@@ -107,4 +133,4 @@ OpenAPI is available at `/v3/api-docs`; Swagger UI is available at `/swagger-ui.
 
 ## Planned API boundaries
 
-The following are design directions, not available endpoints: a proxy path for configured routes, per-route rate-limit policy configuration, and idempotency-key support for selected side-effecting operations. Their exact paths and schemas will be documented only when the corresponding phases are implemented.
+The following are design directions, not available endpoints: per-route rate-limit policy configuration and idempotency-key support for selected side-effecting operations. Their exact paths and schemas will be documented only when the corresponding phases are implemented.

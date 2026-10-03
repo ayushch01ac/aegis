@@ -2,7 +2,7 @@
 
 ## Current implementation
 
-Aegis is a modular monolith: one Spring Boot deployment owns the HTTP API, authentication, and route configuration. Phase 0 (foundation), Phase 1 (route management), and Phase 2 (authentication and authorization) are complete.
+Aegis is a modular monolith: one Spring Boot deployment owns the HTTP API, authentication, route configuration, and controlled downstream proxying. Phase 0 (foundation), Phase 1 (route management), Phase 2 (authentication and authorization), and Phase 3 (controlled downstream proxy) are complete.
 
 ```text
 Client
@@ -13,10 +13,11 @@ Aegis (Spring Boot)
   |-- Status and actuator endpoints
   |-- JWT authentication and role authorization
   |-- Route administration API
+  |-- Proxy: resolves route → builds URI → forwards with per-route timeout
   |-- Validation and structured error handling
   |
   v
-PostgreSQL
+PostgreSQL             Downstream services (via RestClient)
 ```
 
 Docker Compose currently starts PostgreSQL only. Flyway owns the database schema, and Hibernate validates it at startup.
@@ -28,6 +29,7 @@ com.aegis
   AegisApplication
   common   configuration, request IDs, errors, pagination, status endpoint, OpenAPI
   route    downstream-service configuration CRUD
+  proxy    controlled downstream HTTP forwarding
 ```
 
 ### Route module
@@ -83,8 +85,8 @@ PostgreSQL will hold durable configuration and metadata. Redis will be introduce
 
 1. **Complete:** foundation and route management.
 2. **Complete:** JWT authentication with `ADMIN`, `OPERATOR`, and `VIEWER` permissions for administration APIs.
-3. **Next:** add the simplest controlled proxy with explicit connection/response timeouts and safe downstream-error mapping.
-4. Add Redis infrastructure, then an atomic fixed-window limiter followed by token bucket.
+3. **Complete:** controlled proxy at `/api/v1/proxy/{routeName}/**` with per-route explicit connection/read timeouts, hop-by-hop header stripping, and structured downstream-error mapping.
+4. **Next:** add Redis infrastructure, then an atomic fixed-window limiter followed by token bucket.
 5. Add idempotency-aware retries and a testable `CLOSED` / `OPEN` / `HALF_OPEN` circuit breaker.
 6. Add bounded workers, bounded priority queues, and predictable overload rejection.
 7. Add idempotency semantics, Kafka events, observability, expanded tests, measured load testing, production-like Compose, and CI in that order.
