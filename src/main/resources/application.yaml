@@ -24,6 +24,11 @@ spring:
           time_zone: UTC
   flyway:
     enabled: true
+  kafka:
+    bootstrap-servers: ${AEGIS_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
 server:
   port: ${AEGIS_SERVER_PORT:8080}
@@ -82,4 +87,13 @@ aegis:
     enabled: ${AEGIS_EXECUTION_ENABLED:true}
     max-workers: ${AEGIS_EXECUTION_MAX_WORKERS:16}
     queue-capacity: ${AEGIS_EXECUTION_QUEUE_CAPACITY:100}
-
+  idempotency:
+    enabled: ${AEGIS_IDEMPOTENCY_ENABLED:true}
+    processing-ttl-seconds: ${AEGIS_IDEMPOTENCY_PROCESSING_TTL_SECONDS:60}
+    wait-timeout-ms: ${AEGIS_IDEMPOTENCY_WAIT_TIMEOUT_MS:30000}
+    poll-interval-ms: ${AEGIS_IDEMPOTENCY_POLL_INTERVAL_MS:25}
+    completed-ttl-seconds: ${AEGIS_IDEMPOTENCY_COMPLETED_TTL_SECONDS:86400}
+  messaging:
+    kafka:
+      enabled: ${AEGIS_KAFKA_ENABLED:false}
+      proxy-events-topic: ${AEGIS_KAFKA_PROXY_EVENTS_TOPIC:aegis.proxy-events.v1}

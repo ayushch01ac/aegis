@@ -20,9 +20,9 @@
 
 **Trade-off:** Even small schema changes need a migration.
 
-## D3. PostgreSQL for relational persistence; Redis added in Phase 4 for short-lived state
+## D3. PostgreSQL for relational persistence; Redis for short-lived state; Kafka only for opt-in events
 
-**Decision:** Routes and user accounts are stored in PostgreSQL; Redis is introduced in Phase 4 for low-latency shared state. Kafka remains deferred until asynchronous event processing is needed.
+**Decision:** Routes and user accounts are stored in PostgreSQL; Redis provides low-latency shared state. Kafka is limited to optional asynchronous event publication and is not a synchronous dependency.
 
 **Reason:** Route definitions and user credentials are durable configuration suited for PostgreSQL. Redis provides the low-latency, key-value primitives required for rate-limiting (Phase 5) and idempotency coordination (Phase 9).
 
@@ -125,3 +125,23 @@
 **Reason:** The proxy must reject excess work predictably instead of accumulating requests until memory pressure or downstream collapse. Priority is applied only to queued work; work already running is not preempted.
 
 **Trade-off:** A waiting servlet thread still waits for its admitted task. This is a deliberately small synchronous design; queue and worker limits must be tuned to the deployment and should be supported by measured load tests before changing defaults.
+
+## D14. Redis coordinates idempotency keys and caches completed proxy responses
+
+**Decision:** For `POST` and `PATCH` proxy calls that send `Idempotency-Key`, use Redis Lua scripts to atomically create a processing lease, bind the key to a request fingerprint, and retain the completed status, headers, and body for replay.
+
+**Reason:** The same key must not permit concurrent downstream side effects across application instances. Redis already provides the low-latency shared state required for the atomic ownership transition.
+
+**Alternative:** Rely on client retries, use in-memory locks, or create a durable relational idempotency table.
+
+**Trade-off:** The design is bounded by Redis record TTLs and does not claim universal exactly-once execution. A completed downstream response is replayable, but a worker crash after downstream execution and before completion is still an uncertain-outcome case.
+
+## D15. Kafka proxy events are opt-in and best effort
+
+**Decision:** Publish non-sensitive `ProxyCompletedEvent` records asynchronously only when Kafka is explicitly enabled. Do not wait for delivery or make the HTTP response depend on it.
+
+**Reason:** Audit and analytics must not become a new availability dependency in the synchronous proxy path.
+
+**Alternative:** Synchronous broker acknowledgement or a transactional outbox in the request transaction.
+
+**Trade-off:** Delivery can be lost when Kafka is unavailable. The phase intentionally defers durable outbox semantics, consumers, and exactly-once processing until a concrete business requirement justifies them.

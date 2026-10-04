@@ -4,7 +4,7 @@ Aegis is a Java 21 / Spring Boot platform being built to manage API traffic, dow
 
 ## Current status
 
-**Phases 0–8 are complete.** The application forwards HTTP traffic with explicit per-route timeouts, Redis-backed distributed rate limiting, idempotency-aware retries, per-route circuit breaking, and bounded priority execution.
+**Phases 0–10 are complete.** The application forwards HTTP traffic with explicit per-route timeouts, Redis-backed distributed rate limiting, duplicate-request coordination, idempotency-aware retries, per-route circuit breaking, bounded priority execution, and optional Kafka proxy events.
 
 Implemented:
 
@@ -25,9 +25,12 @@ Implemented:
 - Configured retries for idempotent methods; non-idempotent network retries require an explicit route opt-in
 - Per-route `CLOSED` / `OPEN` / `HALF_OPEN` circuit breaker that rejects protected downstream traffic with `503 CIRCUIT_OPEN`
 - Bounded worker pool and priority queue (`CRITICAL` through `LOW`) with immediate `503 PROXY_OVERLOADED` rejection when full
+- Redis-backed `Idempotency-Key` coordination for `POST` and `PATCH` proxy requests, scoped to the authenticated caller and route
+- Cached replay of completed downstream responses and bounded waiting for concurrent duplicates
+- Optional, best-effort Kafka `aegis.proxy-events.v1` events for completed proxy responses; Kafka delivery does not alter HTTP outcomes
 - Unit, controller-slice, deterministic concurrency, and PostgreSQL/Redis Testcontainers integration tests
 
-Not implemented yet: idempotency, Kafka, Prometheus/Grafana, load tests, container image packaging, and CI.
+Not implemented yet: Prometheus/Grafana, expanded test coverage, measured load tests, container image packaging, and CI.
 
 ## Requirements
 
@@ -72,8 +75,8 @@ The future design is intentionally phased so each increment stays runnable, test
 | 6 | Configured, idempotency-aware retries | Complete |
 | 7 | Testable circuit breaker | Complete |
 | 8 | Bounded concurrency, priority, and backpressure | Complete |
-| 9 | Idempotency keys and duplicate-request coordination | Planned |
-| 10 | Kafka events for audit and analytics | Planned |
+| 9 | Idempotency keys and duplicate-request coordination | Complete |
+| 10 | Kafka events for audit and analytics | Complete |
 | 11 | Micrometer, Prometheus, Grafana, and structured operational metrics | Planned |
 | 12 | Broader unit, integration, API, and concurrency coverage | Planned |
 | 13 | Measured load testing | Planned |

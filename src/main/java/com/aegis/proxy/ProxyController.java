@@ -4,11 +4,14 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import java.time.Instant;
+import java.util.UUID;
 import java.util.Collections;
 import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +19,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.aegis.common.error.RequestId;
 import com.aegis.common.web.RequestIdFilter;
+import com.aegis.idempotency.IdempotencyResponse;
+import com.aegis.idempotency.IdempotencyService;
+import com.aegis.messaging.ProxyCompletedEvent;
+import com.aegis.messaging.ProxyEventPublisher;
 
 /**
  * Entry point for proxied traffic.
@@ -35,9 +42,16 @@ public class ProxyController {
     static final String PROXY_PATH = "/api/v1/proxy/{routeName}/**";
 
     private final ProxyService proxyService;
+    private final IdempotencyService idempotencyService;
+    private final ProxyEventPublisher proxyEventPublisher;
 
-    public ProxyController(ProxyService proxyService) {
+    public ProxyController(
+            ProxyService proxyService,
+            IdempotencyService idempotencyService,
+            ProxyEventPublisher proxyEventPublisher) {
         this.proxyService = proxyService;
+        this.idempotencyService = idempotencyService;
+        this.proxyEventPublisher = proxyEventPublisher;
     }
 
     @RequestMapping(PROXY_PATH)
@@ -55,7 +69,8 @@ public class ProxyController {
     public ResponseEntity<byte[]> proxy(
             @Parameter(description = "Name of the configured route") @PathVariable String routeName,
             @RequestBody(required = false) byte[] body,
-            HttpServletRequest request) {
+            HttpServletRequest request,
+            Authentication authentication) {
 
         HttpMethod method = HttpMethod.valueOf(request.getMethod());
         HttpHeaders headers = extractHeaders(request);
@@ -69,8 +84,23 @@ public class ProxyController {
         String pathSuffix = extractPathSuffix(request, routeName);
         String queryString = request.getQueryString();
 
-        ResponseEntity<byte[]> downstream = proxyService.proxy(
-                routeName, pathSuffix, queryString, method, headers, body);
+        IdempotencyResponse idempotencyResponse = isIdempotencyEligible(method, headers)
+                ? idempotencyService.execute(
+                        routeName + ":" + authentication.getName(),
+                        headers.getFirst("Idempotency-Key"),
+                        IdempotencyService.fingerprint(routeName, method.name(), pathSuffix, queryString, body),
+                        () -> proxyService.proxy(routeName, pathSuffix, queryString, method, headers, body))
+                : new IdempotencyResponse(proxyService.proxy(routeName, pathSuffix, queryString, method, headers, body), false);
+        ResponseEntity<byte[]> downstream = idempotencyResponse.response();
+
+        proxyEventPublisher.publish(new ProxyCompletedEvent(
+                UUID.randomUUID(),
+                Instant.now(),
+                requestId,
+                routeName,
+                method.name(),
+                downstream.getStatusCode().value(),
+                idempotencyResponse.replayed()));
 
         // Propagate downstream status and headers; the body is returned as-is.
         return ResponseEntity.status(downstream.getStatusCode())
@@ -99,5 +129,10 @@ public class ProxyController {
                 Collections.list(request.getHeaders(name)).forEach(value ->
                         headers.add(name, value)));
         return headers;
+    }
+
+    private static boolean isIdempotencyEligible(HttpMethod method, HttpHeaders headers) {
+        String key = headers.getFirst("Idempotency-Key");
+        return key != null && !key.isBlank() && (method == HttpMethod.POST || method == HttpMethod.PATCH);
     }
 }

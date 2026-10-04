@@ -12,6 +12,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.aegis.common.config.SecurityConfig;
 import com.aegis.common.error.GlobalExceptionHandler;
 import com.aegis.common.security.SecurityErrorWriter;
+import com.aegis.idempotency.IdempotencyService;
+import com.aegis.messaging.ProxyEventPublisher;
 import com.aegis.route.RouteNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +40,12 @@ class ProxyControllerTest {
 
     @MockitoBean
     private ProxyService proxyService;
+
+    @MockitoBean
+    private IdempotencyService idempotencyService;
+
+    @MockitoBean
+    private ProxyEventPublisher proxyEventPublisher;
 
     @MockitoBean
     private JwtDecoder jwtDecoder;

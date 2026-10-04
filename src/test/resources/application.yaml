@@ -8,3 +8,13 @@ aegis:
   proxy:
     connect-timeout-ms: 3000
     default-read-timeout-ms: 10000
+  idempotency:
+    enabled: false
+    processing-ttl-seconds: 60
+    wait-timeout-ms: 30000
+    poll-interval-ms: 25
+    completed-ttl-seconds: 86400
+  messaging:
+    kafka:
+      enabled: false
+      proxy-events-topic: aegis.proxy-events.v1

@@ -109,7 +109,8 @@ Examples:
 
 ```http
 GET  /api/v1/proxy/orders-service/orders/42
-POST /api/v1/proxy/payments-service/payments?idempotencyKey=abc
+POST /api/v1/proxy/payments-service/payments
+Idempotency-Key: payment-create-abc
 ```
 
 Rules:
@@ -122,6 +123,9 @@ Rules:
 - An unhealthy route returns `503 CIRCUIT_OPEN` while its circuit breaker is open; its `Retry-After` header indicates when a probe may be attempted.
 - Bounded proxy capacity returns `503 PROXY_OVERLOADED` with `Retry-After: 1` rather than accumulating unbounded downstream work.
 - Per-route `timeoutMs` is used as the read-side deadline. Connect timeout is controlled by `AEGIS_PROXY_CONNECT_TIMEOUT_MS` (default 3 000 ms).
+- `POST` and `PATCH` may send an `Idempotency-Key` header. It is scoped to the authenticated caller and route and is bound to the method, path, query string, and body. A matching completed request returns the cached downstream status, headers, and body without forwarding again.
+- A concurrent matching request waits up to `AEGIS_IDEMPOTENCY_WAIT_TIMEOUT_MS` (default 30 000 ms). It returns `409 IDEMPOTENCY_IN_PROGRESS` with `Retry-After: 1` if the original request has not completed. Reusing a key with different request content returns `409 IDEMPOTENCY_KEY_REUSED`.
+- Kafka proxy-completion events are disabled by default. Set `AEGIS_KAFKA_ENABLED=true`, provide `AEGIS_KAFKA_BOOTSTRAP_SERVERS`, and create/enable the configured topic to publish best-effort audit/analytics records. Broker delivery never changes the HTTP response.
 
 ### Errors
 
@@ -132,6 +136,8 @@ Rules:
 | 400 | `INVALID_PARAMETER` | A path or query parameter has an invalid type |
 | 404 | `ROUTE_NOT_FOUND` | The route ID or name does not exist |
 | 409 | `ROUTE_NAME_CONFLICT` | Another route already uses the name |
+| 409 | `IDEMPOTENCY_KEY_REUSED` | An idempotency key was reused for different proxy request content |
+| 409 | `IDEMPOTENCY_IN_PROGRESS` | A matching duplicate request is still executing after the bounded wait |
 | 401 | `INVALID_CREDENTIALS` | Username/password authentication failed |
 | 401 | `UNAUTHORIZED` | A protected endpoint has no valid JWT |
 | 403 | `ACCESS_DENIED` | JWT role cannot perform the action |
@@ -167,6 +173,20 @@ X-Request-Id: req-123
 
 OpenAPI is available at `/v3/api-docs`; Swagger UI is available at `/swagger-ui.html`.
 
-## Planned API boundaries
+## Kafka event contract
 
-The following are design directions, not available endpoints: idempotency-key support for selected side-effecting operations. Their exact paths and schemas will be documented only when the corresponding phases are implemented.
+When Kafka is enabled, Aegis publishes JSON messages to `aegis.proxy-events.v1` by default, keyed by `routeName`:
+
+```json
+{
+  "eventId": "a4c459c0-0ba5-4dd5-b2de-6c2e098a8e01",
+  "occurredAt": "2026-10-04T14:30:00Z",
+  "requestId": "req-123",
+  "routeName": "orders-service",
+  "method": "POST",
+  "status": 201,
+  "idempotencyReplay": false
+}
+```
+
+Delivery is asynchronous and best effort; no consumer, retry topic, or durable outbox is supplied in this phase.
