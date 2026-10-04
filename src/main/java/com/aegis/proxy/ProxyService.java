@@ -12,9 +12,14 @@ import org.springframework.stereotype.Service;
 import com.aegis.ratelimit.RateLimitExceededException;
 import com.aegis.ratelimit.RateLimitResult;
 import com.aegis.ratelimit.RateLimitService;
+import com.aegis.retry.RetryExecutor;
+import com.aegis.retry.RetryPolicy;
+import com.aegis.retry.RetryProperties;
+import com.aegis.circuitbreaker.CircuitBreaker;
 import com.aegis.route.Route;
 import com.aegis.route.RouteNotFoundException;
 import com.aegis.route.RouteRepository;
+import com.aegis.scheduling.PriorityExecutionService;
 
 /**
  * Orchestrates a single proxied request.
@@ -36,14 +41,26 @@ public class ProxyService {
     private final RouteRepository routeRepository;
     private final DownstreamHttpClient httpClient;
     private final RateLimitService rateLimitService;
+    private final RetryExecutor retryExecutor;
+    private final RetryProperties retryProperties;
+    private final CircuitBreaker circuitBreaker;
+    private final PriorityExecutionService priorityExecutionService;
 
     public ProxyService(
             RouteRepository routeRepository,
             DownstreamHttpClient httpClient,
-            RateLimitService rateLimitService) {
+            RateLimitService rateLimitService,
+            RetryExecutor retryExecutor,
+            RetryProperties retryProperties,
+            CircuitBreaker circuitBreaker,
+            PriorityExecutionService priorityExecutionService) {
         this.routeRepository = routeRepository;
         this.httpClient = httpClient;
         this.rateLimitService = rateLimitService;
+        this.retryExecutor = retryExecutor;
+        this.retryProperties = retryProperties;
+        this.circuitBreaker = circuitBreaker;
+        this.priorityExecutionService = priorityExecutionService;
     }
 
     /**
@@ -81,8 +98,10 @@ public class ProxyService {
         URI downstream = buildUri(route.getBaseUrl(), pathSuffix, queryString, routeName);
         log.info("Proxy route={} method={} uri={}", routeName, method, downstream);
 
-        ResponseEntity<byte[]> response = httpClient.forward(
-                method, downstream, headers, body, routeName, route.getTimeoutMs());
+        RetryPolicy retryPolicy = RetryPolicy.fromRouteOrDefault(route, retryProperties);
+        ResponseEntity<byte[]> response = priorityExecutionService.execute(route.getPriority(), () ->
+                circuitBreaker.execute(routeName, () -> retryExecutor.execute(routeName, method, retryPolicy,
+                        () -> httpClient.forward(method, downstream, headers, body, routeName, route.getTimeoutMs()))));
 
         HttpHeaders responseHeaders = new HttpHeaders();
         responseHeaders.putAll(response.getHeaders());

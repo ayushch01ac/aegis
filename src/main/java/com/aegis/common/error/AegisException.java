@@ -17,7 +17,7 @@ public class AegisException extends RuntimeException {
         super(message);
         this.status = status;
         this.code = code;
-        this.headers = headers != null ? headers : HttpHeaders.EMPTY;
+        this.headers = headers != null ? new HttpHeaders(headers) : new HttpHeaders();
     }
 
     public HttpStatus getStatus() {

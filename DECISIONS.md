@@ -109,3 +109,19 @@
 **Alternative:** In-memory rate limiting (Guava/Bucket4j in-JVM) or Redis client-side distributed locks.
 
 **Trade-off:** Lua scripts execute synchronously inside Redis; script complexity must remain minimal to avoid blocking the Redis event loop.
+
+## D12. Conservative retries precede circuit-breaker accounting
+
+**Decision:** Retry only idempotent methods by default, and let the circuit breaker observe the final outcome of the logical downstream call.
+
+**Reason:** Retrying a mutation after an uncertain downstream result can duplicate side effects. Counting individual retry attempts would open a circuit too aggressively for a single client request.
+
+**Trade-off:** A route can still opt in to network-failure retries for non-idempotent methods before idempotency-key support exists; that remains an explicit operational risk.
+
+## D13. Bounded local priority execution protects downstream services
+
+**Decision:** Execute proxy work through a fixed-size worker pool with a bounded priority queue, ordered `CRITICAL`, `HIGH`, `NORMAL`, then `LOW`.
+
+**Reason:** The proxy must reject excess work predictably instead of accumulating requests until memory pressure or downstream collapse. Priority is applied only to queued work; work already running is not preempted.
+
+**Trade-off:** A waiting servlet thread still waits for its admitted task. This is a deliberately small synchronous design; queue and worker limits must be tuned to the deployment and should be supported by measured load tests before changing defaults.

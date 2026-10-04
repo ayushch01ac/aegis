@@ -4,7 +4,7 @@ Aegis is a Java 21 / Spring Boot platform being built to manage API traffic, dow
 
 ## Current status
 
-**Phase 0 (foundation), Phase 1 (route management), Phase 2 (authentication and authorization), Phase 3 (controlled downstream proxy), Phase 4 (Redis connectivity and health checks), and Phase 5 (distributed rate limiting) are complete.** The application can now forward HTTP traffic to configured downstream services with explicit per-route timeouts, connects to Redis with Actuator health monitoring, and enforces Redis-backed distributed rate limiting via atomic fixed-window and token-bucket algorithms.
+**Phases 0–8 are complete.** The application forwards HTTP traffic with explicit per-route timeouts, Redis-backed distributed rate limiting, idempotency-aware retries, per-route circuit breaking, and bounded priority execution.
 
 Implemented:
 
@@ -22,9 +22,12 @@ Implemented:
 - Redis-backed distributed rate limiting (`com.aegis.ratelimit`) supporting atomic `FIXED_WINDOW` and `TOKEN_BUCKET` algorithms via Redis Lua scripts
 - Per-route rate limit configuration (`rateLimitAlgorithm`, `rateLimitCapacity`, `rateLimitWindowSeconds`, `rateLimitRefillRate`) with configurable application defaults
 - Structured `429 RATE_LIMIT_EXCEEDED` error responses returning `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `Retry-After` HTTP headers
+- Configured retries for idempotent methods; non-idempotent network retries require an explicit route opt-in
+- Per-route `CLOSED` / `OPEN` / `HALF_OPEN` circuit breaker that rejects protected downstream traffic with `503 CIRCUIT_OPEN`
+- Bounded worker pool and priority queue (`CRITICAL` through `LOW`) with immediate `503 PROXY_OVERLOADED` rejection when full
 - Unit, controller-slice, deterministic concurrency, and PostgreSQL/Redis Testcontainers integration tests
 
-Not implemented yet: retries, circuit breaking, bounded request execution, idempotency, Kafka, Prometheus/Grafana, load tests, container image packaging, and CI.
+Not implemented yet: idempotency, Kafka, Prometheus/Grafana, load tests, container image packaging, and CI.
 
 ## Requirements
 
@@ -66,9 +69,9 @@ The future design is intentionally phased so each increment stays runnable, test
 | 3 | Controlled downstream HTTP proxy with timeouts | Complete |
 | 4 | Redis connectivity and health checks | Complete |
 | 5 | Distributed fixed-window then token-bucket rate limiting | Complete |
-| 6 | Configured, idempotency-aware retries | Planned |
-| 7 | Testable circuit breaker | Planned |
-| 8 | Bounded concurrency, priority, and backpressure | Planned |
+| 6 | Configured, idempotency-aware retries | Complete |
+| 7 | Testable circuit breaker | Complete |
+| 8 | Bounded concurrency, priority, and backpressure | Complete |
 | 9 | Idempotency keys and duplicate-request coordination | Planned |
 | 10 | Kafka events for audit and analytics | Planned |
 | 11 | Micrometer, Prometheus, Grafana, and structured operational metrics | Planned |

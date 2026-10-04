@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -17,8 +18,7 @@ import org.springframework.web.client.RestClient.Builder;
  *
  * <p>A new {@link RestClient} instance is constructed for each call so that the per-route
  * {@code timeoutMs} can be applied as a request-level read timeout without sharing mutable state.
- * The underlying {@link org.springframework.http.client.HttpComponentsClientHttpRequestFactory}
- * connection pool is reused across calls via the shared base builder.
+ * Each call gets its own lightweight request factory so both timeouts are explicit.
  *
  * <p>Design trade-off: building a per-call client is slightly more expensive than a shared
  * client, but it keeps timeout enforcement simple and correct without thread-local state or a
@@ -30,10 +30,11 @@ public class DownstreamHttpClient {
     private static final Logger log = LoggerFactory.getLogger(DownstreamHttpClient.class);
 
     private final Builder baseBuilder;
+    private final ProxyProperties properties;
 
-    public DownstreamHttpClient(Builder restClientBuilder) {
-        // The injected builder has the connect timeout already set via ProxyClientConfig.
+    public DownstreamHttpClient(Builder restClientBuilder, ProxyProperties properties) {
         this.baseBuilder = restClientBuilder;
+        this.properties = properties;
     }
 
     /**
@@ -55,7 +56,11 @@ public class DownstreamHttpClient {
         log.debug("Proxying {} {} route={} timeout={}ms", method, uri, routeName, readTimeoutMs);
 
         try {
-            return baseBuilder
+            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(Duration.ofMillis(properties.connectTimeoutMs()));
+            factory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
+            return baseBuilder.clone()
+                    .requestFactory(factory)
                     .build()
                     .method(method)
                     .uri(uri)

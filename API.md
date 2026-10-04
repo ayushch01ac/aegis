@@ -64,7 +64,11 @@ Create or update body:
   "rateLimitAlgorithm": "TOKEN_BUCKET",
   "rateLimitCapacity": 100,
   "rateLimitWindowSeconds": 60,
-  "rateLimitRefillRate": 10
+  "rateLimitRefillRate": 10,
+  "retryMaxAttempts": 3,
+  "retryOnNonIdempotent": false,
+  "retryInitialBackoffMs": 100,
+  "retryBackoffMultiplier": 2
 }
 ```
 
@@ -79,6 +83,9 @@ Rules:
 - `rateLimitCapacity` is optional (1–1,000,000). Max permits/tokens.
 - `rateLimitWindowSeconds` is optional (1–86,400). Window size for fixed-window.
 - `rateLimitRefillRate` is optional (1–1,000,000). Refill rate in tokens/sec for token-bucket.
+- `retryMaxAttempts` is optional (1–10); omitted values use `aegis.retry` defaults.
+- `retryOnNonIdempotent` defaults to `false`. It allows network-failure retries for POST, PATCH, and DELETE only; 5xx responses are never retried for these methods.
+- `retryInitialBackoffMs` (0–60,000) and `retryBackoffMultiplier` (1–10) are optional per-route retry overrides.
 
 Create returns `201 Created` and `Location: /api/v1/routes/{id}`. Delete returns `204 No Content`.
 
@@ -111,6 +118,9 @@ Rules:
 - The route must be enabled; disabled routes return `503 ROUTE_DISABLED`.
 - Exceeding the route's rate limit returns `429 RATE_LIMIT_EXCEEDED` with a `Retry-After` header.
 - Network failures, connect timeouts, and read timeouts return `502 DOWNSTREAM_ERROR`.
+- Retryable failures consume the route policy before the final response or error is returned.
+- An unhealthy route returns `503 CIRCUIT_OPEN` while its circuit breaker is open; its `Retry-After` header indicates when a probe may be attempted.
+- Bounded proxy capacity returns `503 PROXY_OVERLOADED` with `Retry-After: 1` rather than accumulating unbounded downstream work.
 - Per-route `timeoutMs` is used as the read-side deadline. Connect timeout is controlled by `AEGIS_PROXY_CONNECT_TIMEOUT_MS` (default 3 000 ms).
 
 ### Errors
@@ -127,7 +137,10 @@ Rules:
 | 403 | `ACCESS_DENIED` | JWT role cannot perform the action |
 | 429 | `RATE_LIMIT_EXCEEDED` | Request rate limit for the target route was exceeded |
 | 503 | `ROUTE_DISABLED` | The proxy target route is currently disabled |
+| 503 | `CIRCUIT_OPEN` | The downstream circuit is temporarily open |
+| 503 | `PROXY_OVERLOADED` | Bounded proxy workers and queue are full |
 | 502 | `DOWNSTREAM_ERROR` | The downstream call timed out or failed |
+| 502 | `RETRY_EXHAUSTED` | Retryable network failures consumed the configured retry attempts |
 | 500 | `INTERNAL_ERROR` | An unexpected failure occurred |
 
 Example rate limit error response:

@@ -29,7 +29,11 @@ public class RouteService {
                 request.rateLimitAlgorithm(),
                 request.rateLimitCapacity(),
                 request.rateLimitWindowSeconds(),
-                request.rateLimitRefillRate());
+                request.rateLimitRefillRate(),
+                request.retryMaxAttempts(),
+                request.retryOnNonIdempotent(),
+                request.retryInitialBackoffMs(),
+                request.retryBackoffMultiplier());
         return RouteResponse.from(routeRepository.save(route));
     }
 
@@ -58,7 +62,11 @@ public class RouteService {
                 request.rateLimitAlgorithm(),
                 request.rateLimitCapacity(),
                 request.rateLimitWindowSeconds(),
-                request.rateLimitRefillRate());
+                request.rateLimitRefillRate(),
+                request.retryMaxAttempts(),
+                request.retryOnNonIdempotent(),
+                request.retryInitialBackoffMs(),
+                request.retryBackoffMultiplier());
         return RouteResponse.from(route);
     }
 

@@ -48,6 +48,18 @@ public class Route {
     @Column(name = "rate_limit_refill_rate")
     private Integer rateLimitRefillRate;
 
+    @Column(name = "retry_max_attempts")
+    private Integer retryMaxAttempts;
+
+    @Column(name = "retry_on_non_idempotent")
+    private Boolean retryOnNonIdempotent;
+
+    @Column(name = "retry_initial_backoff_ms")
+    private Long retryInitialBackoffMs;
+
+    @Column(name = "retry_backoff_multiplier")
+    private Double retryBackoffMultiplier;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -65,7 +77,11 @@ public class Route {
             RateLimitAlgorithm rateLimitAlgorithm,
             Integer rateLimitCapacity,
             Integer rateLimitWindowSeconds,
-            Integer rateLimitRefillRate) {
+            Integer rateLimitRefillRate,
+            Integer retryMaxAttempts,
+            Boolean retryOnNonIdempotent,
+            Long retryInitialBackoffMs,
+            Double retryBackoffMultiplier) {
         this.id = UUID.randomUUID();
         this.name = name;
         this.baseUrl = baseUrl;
@@ -76,6 +92,23 @@ public class Route {
         this.rateLimitCapacity = rateLimitCapacity;
         this.rateLimitWindowSeconds = rateLimitWindowSeconds;
         this.rateLimitRefillRate = rateLimitRefillRate;
+        this.retryMaxAttempts = retryMaxAttempts;
+        this.retryOnNonIdempotent = retryOnNonIdempotent;
+        this.retryInitialBackoffMs = retryInitialBackoffMs;
+        this.retryBackoffMultiplier = retryBackoffMultiplier;
+    }
+
+    public Route(
+            String name,
+            String baseUrl,
+            int timeoutMs,
+            RoutePriority priority,
+            boolean enabled,
+            RateLimitAlgorithm rateLimitAlgorithm,
+            Integer rateLimitCapacity,
+            Integer rateLimitWindowSeconds,
+            Integer rateLimitRefillRate) {
+        this(name, baseUrl, timeoutMs, priority, enabled, rateLimitAlgorithm, rateLimitCapacity, rateLimitWindowSeconds, rateLimitRefillRate, null, null, null, null);
     }
 
     public Route(String name, String baseUrl, int timeoutMs, RoutePriority priority, boolean enabled) {
@@ -103,7 +136,11 @@ public class Route {
             RateLimitAlgorithm rateLimitAlgorithm,
             Integer rateLimitCapacity,
             Integer rateLimitWindowSeconds,
-            Integer rateLimitRefillRate) {
+            Integer rateLimitRefillRate,
+            Integer retryMaxAttempts,
+            Boolean retryOnNonIdempotent,
+            Long retryInitialBackoffMs,
+            Double retryBackoffMultiplier) {
         this.name = name;
         this.baseUrl = baseUrl;
         this.timeoutMs = timeoutMs;
@@ -113,6 +150,23 @@ public class Route {
         this.rateLimitCapacity = rateLimitCapacity;
         this.rateLimitWindowSeconds = rateLimitWindowSeconds;
         this.rateLimitRefillRate = rateLimitRefillRate;
+        this.retryMaxAttempts = retryMaxAttempts;
+        this.retryOnNonIdempotent = retryOnNonIdempotent;
+        this.retryInitialBackoffMs = retryInitialBackoffMs;
+        this.retryBackoffMultiplier = retryBackoffMultiplier;
+    }
+
+    public void applyUpdate(
+            String name,
+            String baseUrl,
+            int timeoutMs,
+            RoutePriority priority,
+            boolean enabled,
+            RateLimitAlgorithm rateLimitAlgorithm,
+            Integer rateLimitCapacity,
+            Integer rateLimitWindowSeconds,
+            Integer rateLimitRefillRate) {
+        applyUpdate(name, baseUrl, timeoutMs, priority, enabled, rateLimitAlgorithm, rateLimitCapacity, rateLimitWindowSeconds, rateLimitRefillRate, null, null, null, null);
     }
 
     public void applyUpdate(String name, String baseUrl, int timeoutMs, RoutePriority priority, boolean enabled) {
@@ -157,6 +211,22 @@ public class Route {
 
     public Integer getRateLimitRefillRate() {
         return rateLimitRefillRate;
+    }
+
+    public Integer getRetryMaxAttempts() {
+        return retryMaxAttempts;
+    }
+
+    public Boolean getRetryOnNonIdempotent() {
+        return retryOnNonIdempotent;
+    }
+
+    public Long getRetryInitialBackoffMs() {
+        return retryInitialBackoffMs;
+    }
+
+    public Double getRetryBackoffMultiplier() {
+        return retryBackoffMultiplier;
     }
 
     public Instant getCreatedAt() {

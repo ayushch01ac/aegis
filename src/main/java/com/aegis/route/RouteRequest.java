@@ -17,7 +17,24 @@ public record RouteRequest(
         RateLimitAlgorithm rateLimitAlgorithm,
         @Min(1) @Max(1_000_000) Integer rateLimitCapacity,
         @Min(1) @Max(86_400) Integer rateLimitWindowSeconds,
-        @Min(1) @Max(1_000_000) Integer rateLimitRefillRate) {
+        @Min(1) @Max(1_000_000) Integer rateLimitRefillRate,
+        @Min(1) @Max(10) Integer retryMaxAttempts,
+        Boolean retryOnNonIdempotent,
+        @Min(0) @Max(60_000) Long retryInitialBackoffMs,
+        @Min(1) @Max(10) Double retryBackoffMultiplier) {
+
+    public RouteRequest(
+            String name,
+            String baseUrl,
+            Integer timeoutMs,
+            RoutePriority priority,
+            Boolean enabled,
+            RateLimitAlgorithm rateLimitAlgorithm,
+            Integer rateLimitCapacity,
+            Integer rateLimitWindowSeconds,
+            Integer rateLimitRefillRate) {
+        this(name, baseUrl, timeoutMs, priority, enabled, rateLimitAlgorithm, rateLimitCapacity, rateLimitWindowSeconds, rateLimitRefillRate, null, null, null, null);
+    }
 
     public RouteRequest(
             String name,

@@ -15,8 +15,28 @@ public record RouteResponse(
         Integer rateLimitCapacity,
         Integer rateLimitWindowSeconds,
         Integer rateLimitRefillRate,
+        Integer retryMaxAttempts,
+        Boolean retryOnNonIdempotent,
+        Long retryInitialBackoffMs,
+        Double retryBackoffMultiplier,
         Instant createdAt,
         Instant updatedAt) {
+
+    public RouteResponse(
+            UUID id,
+            String name,
+            String baseUrl,
+            int timeoutMs,
+            RoutePriority priority,
+            boolean enabled,
+            RateLimitAlgorithm rateLimitAlgorithm,
+            Integer rateLimitCapacity,
+            Integer rateLimitWindowSeconds,
+            Integer rateLimitRefillRate,
+            Instant createdAt,
+            Instant updatedAt) {
+        this(id, name, baseUrl, timeoutMs, priority, enabled, rateLimitAlgorithm, rateLimitCapacity, rateLimitWindowSeconds, rateLimitRefillRate, null, null, null, null, createdAt, updatedAt);
+    }
 
     public RouteResponse(
             UUID id,
@@ -42,6 +62,10 @@ public record RouteResponse(
                 route.getRateLimitCapacity(),
                 route.getRateLimitWindowSeconds(),
                 route.getRateLimitRefillRate(),
+                route.getRetryMaxAttempts(),
+                route.getRetryOnNonIdempotent(),
+                route.getRetryInitialBackoffMs(),
+                route.getRetryBackoffMultiplier(),
                 route.getCreatedAt(),
                 route.getUpdatedAt());
     }

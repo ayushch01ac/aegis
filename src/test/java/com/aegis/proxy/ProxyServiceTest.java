@@ -8,14 +8,19 @@ import static org.mockito.Mockito.when;
 import com.aegis.ratelimit.RateLimitExceededException;
 import com.aegis.ratelimit.RateLimitResult;
 import com.aegis.ratelimit.RateLimitService;
+import com.aegis.circuitbreaker.CircuitBreaker;
+import com.aegis.circuitbreaker.CircuitBreakerProperties;
+import com.aegis.retry.RetryExecutor;
+import com.aegis.retry.RetryProperties;
 import com.aegis.route.Route;
 import com.aegis.route.RouteNotFoundException;
 import com.aegis.route.RoutePriority;
 import com.aegis.route.RouteRepository;
 import java.util.Optional;
+import java.time.Clock;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
@@ -35,8 +40,17 @@ class ProxyServiceTest {
     @Mock
     private RateLimitService rateLimitService;
 
-    @InjectMocks
     private ProxyService proxyService;
+
+    @BeforeEach
+    void setUp() {
+        RetryProperties retryProperties = new RetryProperties(false, 3, 0, 2, false);
+        proxyService = new ProxyService(routeRepository, httpClient, rateLimitService,
+                new RetryExecutor(retryProperties), retryProperties,
+                new CircuitBreaker(new CircuitBreakerProperties(false, 5, 1_000, 1), Clock.systemUTC()),
+                new com.aegis.scheduling.PriorityExecutionService(
+                        new com.aegis.scheduling.ExecutionProperties(false, 1, 1)));
+    }
 
     @Test
     void missingRouteThrowsRouteNotFoundException() {

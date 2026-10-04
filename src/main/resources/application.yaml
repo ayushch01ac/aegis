@@ -67,5 +67,19 @@ aegis:
     default-window-seconds: ${AEGIS_RATE_LIMIT_DEFAULT_WINDOW_SECONDS:60}
     default-refill-rate: ${AEGIS_RATE_LIMIT_DEFAULT_REFILL_RATE:10}
     fail-open: ${AEGIS_RATE_LIMIT_FAIL_OPEN:false}
-
+  retry:
+    enabled: ${AEGIS_RETRY_ENABLED:true}
+    default-max-attempts: ${AEGIS_RETRY_DEFAULT_MAX_ATTEMPTS:3}
+    default-initial-backoff-ms: ${AEGIS_RETRY_DEFAULT_INITIAL_BACKOFF_MS:100}
+    default-backoff-multiplier: ${AEGIS_RETRY_DEFAULT_BACKOFF_MULTIPLIER:2}
+    default-retry-on-non-idempotent: ${AEGIS_RETRY_DEFAULT_RETRY_ON_NON_IDEMPOTENT:false}
+  circuit-breaker:
+    enabled: ${AEGIS_CIRCUIT_BREAKER_ENABLED:true}
+    failure-threshold: ${AEGIS_CIRCUIT_BREAKER_FAILURE_THRESHOLD:5}
+    open-duration-ms: ${AEGIS_CIRCUIT_BREAKER_OPEN_DURATION_MS:30000}
+    half-open-max-calls: ${AEGIS_CIRCUIT_BREAKER_HALF_OPEN_MAX_CALLS:1}
+  execution:
+    enabled: ${AEGIS_EXECUTION_ENABLED:true}
+    max-workers: ${AEGIS_EXECUTION_MAX_WORKERS:16}
+    queue-capacity: ${AEGIS_EXECUTION_QUEUE_CAPACITY:100}
 

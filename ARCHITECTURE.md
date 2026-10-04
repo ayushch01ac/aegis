@@ -2,7 +2,7 @@
 
 ## Current implementation
 
-Aegis is a modular monolith: one Spring Boot deployment owns the HTTP API, authentication, route configuration, controlled downstream proxying, Redis infrastructure, and distributed rate limiting. Phase 0 (foundation), Phase 1 (route management), Phase 2 (authentication and authorization), Phase 3 (controlled downstream proxy), Phase 4 (Redis connectivity and health checks), and Phase 5 (distributed rate limiting) are complete.
+Aegis is a modular monolith: one Spring Boot deployment owns the HTTP API, authentication, route configuration, controlled downstream proxying, Redis infrastructure, distributed rate limiting, downstream resilience, and bounded execution. Phases 0–8 are complete.
 
 ```text
 Client
@@ -99,8 +99,9 @@ PostgreSQL holds durable configuration and metadata. Redis provides shared, low-
 3. **Complete:** controlled proxy at `/api/v1/proxy/{routeName}/**` with per-route explicit connection/read timeouts, hop-by-hop header stripping, and structured downstream-error mapping.
 4. **Complete:** Redis connectivity via Spring Data Redis (Lettuce), `StringRedisTemplate`, and Actuator health check integration.
 5. **Complete:** distributed atomic fixed-window and token-bucket rate limiting using Redis Lua scripts.
-6. **Next:** add configured, idempotency-aware retries and a testable `CLOSED` / `OPEN` / `HALF_OPEN` circuit breaker.
-7. Add bounded workers, bounded priority queues, and predictable overload rejection.
-8. Add idempotency semantics, Kafka events, observability, expanded tests, measured load testing, production-like Compose, and CI in that order.
+6. **Complete:** configured, idempotency-aware retries for transient failures.
+7. **Complete:** per-route, in-memory `CLOSED` / `OPEN` / `HALF_OPEN` circuit breakers with deterministic clock-driven tests.
+8. **Complete:** bounded downstream workers and a bounded priority queue with predictable overload rejection.
+9. Next: add idempotency semantics, Kafka events, observability, expanded tests, measured load testing, production-like Compose, and CI in that order.
 
 Each phase must compile, pass relevant tests, update this document and the API contract, and state its trade-offs. No current document makes unmeasured performance claims.
