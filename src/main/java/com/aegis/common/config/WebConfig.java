@@ -1,5 +1,6 @@
 package com.aegis.common.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,6 +13,11 @@ import org.springframework.data.web.config.PageableHandlerMethodArgumentResolver
 @EnableConfigurationProperties(ApiProperties.class)
 @EnableSpringDataWebSupport(pageSerializationMode = PageSerializationMode.VIA_DTO)
 public class WebConfig {
+
+    @Bean
+    ObjectMapper objectMapper() {
+        return new ObjectMapper().findAndRegisterModules();
+    }
 
     @Bean
     PageableHandlerMethodArgumentResolverCustomizer pageableCustomizer(ApiProperties apiProperties) {

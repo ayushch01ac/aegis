@@ -3,6 +3,7 @@ package com.aegis.auth;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -17,6 +18,7 @@ public class JwtTokenService {
     private final SecurityProperties securityProperties;
     private final Clock clock;
 
+    @Autowired
     public JwtTokenService(JwtEncoder jwtEncoder, SecurityProperties securityProperties) {
         this(jwtEncoder, securityProperties, Clock.systemUTC());
     }

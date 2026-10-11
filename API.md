@@ -189,4 +189,4 @@ When Kafka is enabled, Aegis publishes JSON messages to `aegis.proxy-events.v1` 
 }
 ```
 
-Delivery is asynchronous and best effort; no consumer, retry topic, or durable outbox is supplied in this phase.
+Delivery is asynchronous and best effort; Aegis does not include a consumer, retry topic, or durable outbox.

@@ -1,123 +1,79 @@
 # Architecture
 
-## Current implementation
+## Overview
 
-Aegis is a modular monolith: one Spring Boot deployment owns the HTTP API, authentication, route configuration, controlled downstream proxying, Redis infrastructure, distributed rate limiting, duplicate-request coordination, downstream resilience, bounded execution, and optional event publishing. Phases 0–10 are complete.
+Aegis is one Spring Boot deployment with logical modules. It is deliberately a modular monolith: the synchronous request pipeline is cohesive, while package boundaries keep each reliability concern understandable and independently testable.
+
+The optional `demo/orders-service` is a separate Spring Boot application used only to demonstrate this boundary locally. It is not a module of the Aegis artifact and Aegis can proxy any compatible HTTP service, not only Spring Boot applications.
 
 ```text
 Client
   |
   v
-Aegis (Spring Boot)
-  |-- Request ID filter
-  |-- Status and actuator health endpoints (PostgreSQL + Redis)
+Aegis
+  |-- request ID and structured errors
   |-- JWT authentication and role authorization
-  |-- Route administration API (including per-route rate limit configuration)
-  |-- Rate Limit evaluation (Redis-backed atomic Fixed Window / Token Bucket)
-  |-- Proxy: resolves route → evaluates rate limit → coordinates idempotency → forwards with per-route timeout
-  |-- Optional Kafka publisher: asynchronous completed-proxy audit/analytics events
-  |-- Validation and structured error handling
+  |-- route administration API
+  |-- Redis rate-limit decision
+  |-- idempotency coordination when eligible
+  |-- bounded priority admission
+  |-- circuit breaker and retry policy
+  |-- HTTP proxy with explicit timeouts
+  |-- optional completed-response Kafka event
   |
-  +---> PostgreSQL (Flyway migrations, DDL validate)
-  +---> Redis (Lettuce, StringRedisTemplate, Actuator RedisHealthIndicator, Lua script limiters)
-  +---> Downstream services (via RestClient)
-  +---> Kafka (optional; completed proxy events only)
+  +---> PostgreSQL: routes and users
+  +---> Redis: rate limits and idempotency records
+  +---> Downstream HTTP services
+  +---> Kafka: optional best-effort event sink
 ```
 
-Docker Compose starts PostgreSQL and Redis. Flyway owns the database schema, Hibernate validates it at startup, Spring Data Redis (Lettuce) manages Redis connectivity, and Lua scripts execute atomic rate-limiting decisions.
-
-### Packages
+## Modules
 
 ```text
 com.aegis
-  AegisApplication
-  common      configuration (including Redis), request IDs, errors, pagination, status endpoint, OpenAPI
-  auth        JWT authentication and role authorization
-  route       downstream-service configuration CRUD
-  proxy       controlled downstream HTTP forwarding
-  ratelimit   Redis-backed distributed rate limiting (fixed window and token bucket)
-  idempotency Redis-backed duplicate-operation coordination and response replay
-  messaging   opt-in Kafka event publication
+  common          request IDs, errors, pagination, status, OpenAPI, shared configuration
+  auth            local users, BCrypt verification, JWTs, authorization
+  route           persisted downstream-route configuration
+  proxy           proxy controller, orchestration, downstream HTTP client
+  ratelimit       Redis Lua fixed-window and token-bucket limiters
+  retry           idempotency-aware retry policy and executor
+  circuitbreaker  per-route CLOSED / OPEN / HALF_OPEN protection
+  scheduling      fixed workers, bounded priority queue, overload rejection
+  idempotency     Redis lease coordination and response replay
+  messaging       opt-in Kafka completion-event publishing
 ```
 
-### Route module
+## Request pipeline
 
-A route is durable configuration for a downstream service: its name, base URL, timeout, default priority, enabled state, and rate-limiting policy (`rateLimitAlgorithm`, `rateLimitCapacity`, `rateLimitWindowSeconds`, `rateLimitRefillRate`). JPA entities remain inside the module; controllers accept and return DTOs.
+For a protected proxy request, Spring Security authenticates the Bearer JWT first. The controller captures the raw request pieces and carries the correlation ID downstream. `ProxyService` then resolves the route, rejects disabled routes, evaluates the Redis rate limit, builds the target URI, and runs the downstream call through bounded priority admission, the route circuit breaker, and the retry executor.
 
-`ux_routes_name` provides uniqueness and supports the create/rename lookup path. Route lists are paginated to prevent unbounded result sets.
+`POST` and `PATCH` requests carrying `Idempotency-Key` take one additional outer step: Redis gives one matching request a temporary processing lease, coordinates bounded waiting duplicates, and stores a completed downstream response for replay. Every completed response is offered to a `ProxyEventPublisher`; the default publisher is a no-op, while Kafka is an explicit opt-in.
 
-### Rate limiting module
+## State ownership
 
-`com.aegis.ratelimit` implements Redis-backed distributed rate limiting:
+| State | Owner | Reason |
+| --- | --- | --- |
+| Routes and user accounts | PostgreSQL | Durable, relational configuration. |
+| Database schema | Flyway | Explicit and repeatable migrations; Hibernate only validates. |
+| Rate-limit counters and buckets | Redis | Shared, low-latency atomic state across application instances. |
+| Idempotency leases and cached responses | Redis | Shared duplicate coordination with TTL-bound records. |
+| Circuit state | Application memory | Small per-instance state machine, easy to test; resets on restart. |
+| Completion events | Kafka, when enabled | Asynchronous, noncritical audit/analytics signal. |
 
-1. **Fixed Window (`FixedWindowRateLimiter`):** Divides time into explicit windows of duration `windowSeconds`. Uses an atomic Redis `INCR` and `EXPIRE` Lua script to count requests within each window.
-2. **Token Bucket (`TokenBucketRateLimiter`):** Maintains a token bucket refilled continuously at `refillRate` tokens per second up to `capacity`. Atomic refill and token consumption are executed via a Redis Lua script.
-3. **RateLimitService:** Evaluates rate limits using either the route's explicit rate limit policy or global application defaults (`aegis.rate-limit.*`). Supports configurable `failOpen` mode if Redis is temporarily unreachable.
-4. **Headers & Errors:** Exceeded limits return `429 TOO_MANY_REQUESTS` (`RATE_LIMIT_EXCEEDED`) with `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `Retry-After` headers. Allowed requests propagate `X-RateLimit-Limit` and `X-RateLimit-Remaining` to the client response.
+## HTTP and security boundaries
 
-### Current security posture
+All public APIs use `/api/v1`. Controllers use immutable DTOs; JPA entities never cross the HTTP boundary. Bean Validation rejects malformed route configuration, and route lists are paginated.
 
-Spring Security validates HMAC-SHA256 Bearer JWTs. Signing material, token lifetime, and bootstrap administrator credentials are supplied through environment variables. A Flyway migration stores users with BCrypt password hashes and a single role. The bootstrap administrator is created only when its username does not already exist; credentials are never logged.
+The security model is stateless HMAC-SHA256 Bearer JWTs. JWT signing material and the bootstrap administrator come from environment variables. `ADMIN` controls route mutations; `ADMIN`, `OPERATOR`, and `VIEWER` can read routes and proxy traffic. Errors have a stable JSON shape and a request ID.
 
-Route reads require `ADMIN`, `OPERATOR`, or `VIEWER`; route mutations require `ADMIN`. CSRF, form login, and HTTP Basic are disabled because the API is stateless. Security failures use the standard structured-error shape and include the request ID.
+The proxy strips hop-by-hop HTTP headers and forwards the request ID. Each route supplies an explicit read timeout; the proxy also has an explicit connection timeout. It preserves downstream HTTP status, body, and end-to-end headers.
 
-### Idempotency module
+## Reliability controls and limits
 
-`POST` and `PATCH` proxy requests with a non-blank `Idempotency-Key` are coordinated in Redis. The storage key is scoped to route and authenticated subject; a SHA-256 fingerprint binds it to the method, proxied path, query string, and raw body. A Lua script grants one caller a short-lived `PROCESSING` lease. Concurrent matching requests wait only for the configured bounded interval and replay a completed response; different fingerprints receive `409 IDEMPOTENCY_KEY_REUSED`.
+Redis Lua scripts make both rate-limiting algorithms atomic. Retry policy favors safe repeatability: idempotent methods may retry transient failures and 5xx responses; mutations need explicit opt-in for network-failure retries and are never retried on 5xx by this policy. The circuit breaker acts on the result of the retry loop, not every individual attempt.
 
-Only completed downstream HTTP responses are cached. Gateway exceptions release the processing lease, allowing a later retry. The completed response includes its status, headers, and body; it is retained for the configured completed-record TTL. This makes response replay practical without claiming exactly-once execution beyond the Redis lease lifetime.
+Bounded workers and a bounded priority queue reject excess work with `503 PROXY_OVERLOADED`, rather than allowing an unlimited queue. The endpoint remains synchronous after admission. Idempotency improves duplicate-write safety but does not claim exactly-once downstream execution across every crash scenario. Kafka events are best effort and do not use an outbox.
 
-### Kafka event module
+## Possible future developments
 
-When `aegis.messaging.kafka.enabled=true`, Aegis asynchronously publishes one `ProxyCompletedEvent` for every successful proxy response, including idempotency replays. Events contain an event ID, time, request ID, route, method, response status, and replay marker—never request or response bodies, credentials, tokens, or query parameters. The request path does not wait for Kafka acknowledgement; failures are logged and must be handled as best-effort delivery. There is no outbox or exactly-once guarantee in this phase.
-
-## Target architecture
-
-The target remains one deployable application with logical modules, not prematurely split microservices.
-
-```text
-Client
-  |
-  v
-Authentication -> validation -> rate limit -> idempotency -> priority/backpressure
-  -> circuit breaker -> proxy execution -> retry when explicitly allowed
-  |
-  v
-Response + metrics/logs/events
-```
-
-Planned module boundaries:
-
-```text
-com.aegis
-  auth             JWT authentication and role authorization
-  route            downstream configuration
-  proxy            controlled downstream HTTP forwarding
-  ratelimit        Redis-backed distributed limits
-  retry            transient-failure retry policy
-  circuitbreaker   downstream protection state machine
-  idempotency      duplicate-operation protection
-  scheduling       bounded priority execution and backpressure
-  messaging        Kafka event publication and consumers
-  observability    metrics, tracing-compatible correlation, operational logging
-  audit            durable audit concerns
-  common           shared HTTP and configuration concerns
-```
-
-PostgreSQL holds durable configuration and metadata. Redis provides shared, low-latency, short-lived state such as rate-limit buckets and idempotency coordination. Kafka is an optional outbound event sink; normal responses do not depend on broker acknowledgement or consumers. Prometheus and Grafana are deferred until meaningful metrics exist.
-
-## Phased evolution
-
-1. **Complete:** foundation and route management.
-2. **Complete:** JWT authentication with `ADMIN`, `OPERATOR`, and `VIEWER` permissions for administration APIs.
-3. **Complete:** controlled proxy at `/api/v1/proxy/{routeName}/**` with per-route explicit connection/read timeouts, hop-by-hop header stripping, and structured downstream-error mapping.
-4. **Complete:** Redis connectivity via Spring Data Redis (Lettuce), `StringRedisTemplate`, and Actuator health check integration.
-5. **Complete:** distributed atomic fixed-window and token-bucket rate limiting using Redis Lua scripts.
-6. **Complete:** configured, idempotency-aware retries for transient failures.
-7. **Complete:** per-route, in-memory `CLOSED` / `OPEN` / `HALF_OPEN` circuit breakers with deterministic clock-driven tests.
-8. **Complete:** bounded downstream workers and a bounded priority queue with predictable overload rejection.
-9. **Complete:** Redis-backed idempotency keys for POST/PATCH, duplicate coordination, response replay, and bounded duplicate waits.
-10. **Complete:** Optional asynchronous Kafka events for completed proxy responses.
-11. Next: Micrometer, Prometheus, Grafana, and structured operational metrics; then broader tests, measured load testing, production-like Compose, and CI.
-
-Each phase must compile, pass relevant tests, update this document and the API contract, and state its trade-offs. No current document makes unmeasured performance claims.
+Examples of optional extensions are measured load testing, operational metrics, stronger outbound-network controls, a connection pool if measurements justify it, broader test coverage, delivery automation, and a durable outbox if event-delivery guarantees become a requirement. None of these is required for the current architecture.
