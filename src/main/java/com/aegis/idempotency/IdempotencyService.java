@@ -9,6 +9,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -166,7 +167,9 @@ public class IdempotencyService {
 
     private String serializeHeaders(HttpHeaders headers) {
         try {
-            return objectMapper.writeValueAsString(headers);
+            Map<String, List<String>> values = new LinkedHashMap<>();
+            headers.forEach((name, headerValues) -> values.put(name, List.copyOf(headerValues)));
+            return objectMapper.writeValueAsString(values);
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Could not serialize idempotency response headers", ex);
         }

@@ -104,7 +104,7 @@ public class ProxyController {
 
         // Propagate downstream status and headers; the body is returned as-is.
         return ResponseEntity.status(downstream.getStatusCode())
-                .headers(downstream.getHeaders())
+                .headers(DownstreamHttpClient.filterHopByHopHeaders(downstream.getHeaders()))
                 .body(downstream.getBody());
     }
 

@@ -2,6 +2,7 @@ package com.aegis.proxy;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -85,9 +86,10 @@ public class DownstreamHttpClient {
      * Removes hop-by-hop headers that must not be forwarded to the downstream service.
      * This is a minimal safe-default list; SSRF controls are enforced at route-creation time.
      */
-    private static HttpHeaders filterHopByHopHeaders(HttpHeaders incoming) {
+    static HttpHeaders filterHopByHopHeaders(HttpHeaders incoming) {
         HttpHeaders filtered = new HttpHeaders();
         filtered.addAll(incoming);
+        List<String> connectionHeaders = incoming.getValuesAsList(HttpHeaders.CONNECTION);
         filtered.remove(HttpHeaders.HOST);
         filtered.remove(HttpHeaders.CONNECTION);
         filtered.remove("Keep-Alive");
@@ -96,6 +98,11 @@ public class DownstreamHttpClient {
         filtered.remove("Trailers");
         filtered.remove("Transfer-Encoding");
         filtered.remove("Upgrade");
+        connectionHeaders.stream()
+                .flatMap(value -> List.of(value.split(",")).stream())
+                .map(String::trim)
+                .filter(name -> !name.isEmpty())
+                .forEach(filtered::remove);
         return filtered;
     }
 }

@@ -1,9 +1,7 @@
 package com.aegis.ratelimit;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 
-@Component
 @ConfigurationProperties(prefix = "aegis.rate-limit")
 public class RateLimitProperties {
 

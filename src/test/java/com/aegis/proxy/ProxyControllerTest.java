@@ -7,6 +7,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.aegis.common.config.SecurityConfig;
@@ -89,13 +90,17 @@ class ProxyControllerTest {
         byte[] responseBody = "{\"id\":1}".getBytes();
         HttpHeaders responseHeaders = new HttpHeaders();
         responseHeaders.setContentType(MediaType.APPLICATION_JSON);
+        responseHeaders.set(HttpHeaders.CONNECTION, "X-Downstream-Connection-Only");
+        responseHeaders.set("X-Downstream-Connection-Only", "must-not-leak");
 
         when(proxyService.proxy(eq("orders"), any(), any(), eq(HttpMethod.GET), any(), any()))
                 .thenReturn(ResponseEntity.ok().headers(responseHeaders).body(responseBody));
 
         mockMvc.perform(get("/api/v1/proxy/orders/orders/1")
                         .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_VIEWER"))))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist(HttpHeaders.CONNECTION))
+                .andExpect(header().doesNotExist("X-Downstream-Connection-Only"));
     }
 
     @Test
